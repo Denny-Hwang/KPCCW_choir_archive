@@ -609,29 +609,53 @@ function matchVideos() {
     }
   }
 
+  var linkSheet = ss.getSheetByName('practice_links');
+  var linkHeaders = linkSheet.getRange(1, 1, 1, linkSheet.getLastColumn()).getValues()[0];
+
   var toAppend = [];
   for (var k in candidates) {
     var v = candidates[k];
     if (v.isMidi) midiOnly++;
-    toAppend.push([v.display, v.part, 'https://youtu.be/' + v.videoId, '', '', 'youtube_channel', false]);
+    toAppend.push(buildLinkRow_(linkHeaders, v));
   }
 
-  if (toAppend.length) {
-    var sheet = ss.getSheetByName('practice_links');
-    sheet.getRange(sheet.getLastRow() + 1, 1, toAppend.length, 7).setValues(toAppend);
+  // 드롭다운에 걸리는 값이 하나라도 있으면 setValues가 묶음 전체를 예외로 죽인다.
+  // 먼저 걸러 내야 나머지가 들어가고, 무엇이 걸렸는지도 알 수 있다.
+  var split = splitByValidation_(linkSheet, linkHeaders, toAppend);
+  if (split.ok.length) {
+    linkSheet
+      .getRange(linkSheet.getLastRow() + 1, 1, split.ok.length, linkHeaders.length)
+      .setValues(split.ok);
   }
 
-  writeReport_(ss, failures);
+  var report = split.bad.map(function (b) { return '시트가 거부함 / ' + b.reason; });
+  writeReport_(ss, report.concat(failures));
 
   ui.alert(
     '영상 매칭 완료',
-    '추가 ' + toAppend.length + '개 (전부 검증 대기)\n' +
+    '추가 ' + split.ok.length + '개 (전부 검증 대기)\n' +
       (midiOnly ? '그중 ' + midiOnly + '개는 실연이 없어 MIDI를 썼습니다.\n' : '') +
-      '매칭 실패 ' + failures.length + '건\n\n' +
-      (failures.length ? '_매칭실패 시트에 실패 목록을 적었습니다.\n' : '') +
+      '매칭 실패 ' + failures.length + '건\n' +
+      (split.bad.length ? '시트가 거부한 행 ' + split.bad.length + '개 — ' + split.bad[0].reason + '\n' : '') +
+      '\n' +
+      (report.length + failures.length ? '_매칭실패 시트에 목록을 적었습니다.\n' : '') +
       '추가된 링크는 사람이 재생을 확인해 검증 열을 체크하기 전까지 공지에 나가지 않습니다.',
     ui.ButtonSet.OK
   );
+}
+
+/** practice_links 행을 열 이름으로 만든다. 열 순서에 기대지 않는다 (§4.5). */
+function buildLinkRow_(headers, candidate) {
+  return headers.map(function (header) {
+    switch (String(header).trim()) {
+      case '표시명': return candidate.display;
+      case '파트': return candidate.part;
+      case 'URL': return 'https://youtu.be/' + candidate.videoId;
+      case '출처': return 'youtube_channel';
+      case '검증': return false;
+      default: return '';
+    }
+  });
 }
 
 /**
@@ -793,13 +817,14 @@ function registerOwnedBooks() {
 
   var added = [];
   var missing = [];
+  var rejected = [];
   for (var i = 0; i < owned.length; i++) {
     var entries = songsFromCache_(cache, owned[i]);
     if (!entries.length) {
       missing.push(owned[i]);
       continue;
     }
-    var n = appendSongs_(ss, owned[i], entries);
+    var n = appendSongs_(ss, owned[i], entries, rejected);
     added.push(owned[i] + ' ' + n + '곡' + (n < entries.length ? ' (이미 있던 ' + (entries.length - n) + '곡 제외)' : ''));
   }
 
@@ -809,6 +834,10 @@ function registerOwnedBooks() {
       (missing.length
         ? '채널에 재생목록이 없는 권: ' + missing.join(', ') + '\n' +
           '이 권들은 [악보집 등록]으로 목차를 붙여넣거나, 선곡할 때마다 한 곡씩 넣으면 됩니다.\n\n'
+        : '') +
+      (rejected.length
+        ? '시트가 거부한 행 ' + rejected.length + '개:\n  ' + rejected.slice(0, 5).join('\n  ') + '\n' +
+          '해당 열의 드롭다운 목록에 그 값이 없습니다. [시트 초기화]를 다시 실행하면 목록이 갱신됩니다.\n\n'
         : '') +
       '전부 상태=후보, 검증=FALSE로 들어갔습니다.\n' +
       '이어서 [영상 매칭]을 실행하면 파트 영상이 채워집니다.',
@@ -847,10 +876,15 @@ function registerBookPrompt() {
     entries = parsePastedToc_(pasted.getResponseText());
   }
 
-  var added = appendSongs_(ss, bookCode, entries);
+  var rejected = [];
+  var added = appendSongs_(ss, bookCode, entries, rejected);
   ui.alert(
     '악보집 등록 완료',
     bookCode + ' · ' + added + '곡 추가 (전부 상태=후보, 검증=FALSE)\n\n' +
+      (rejected.length
+        ? '시트가 거부한 행 ' + rejected.length + '개:\n  ' + rejected.slice(0, 5).join('\n  ') + '\n' +
+          '해당 열의 드롭다운 목록에 그 값이 없습니다. [시트 초기화]를 다시 실행하면 목록이 갱신됩니다.\n\n'
+        : '') +
       '이어서 "영상 매칭"을 실행하면 파트 영상이 검증 대기 상태로 채워집니다.',
     ui.ButtonSet.OK
   );
@@ -908,7 +942,7 @@ function parsePastedToc_(text) {
   return out;
 }
 
-function appendSongs_(ss, bookCode, entries) {
+function appendSongs_(ss, bookCode, entries, rejected) {
   if (!entries.length) return 0;
   var sheet = ss.getSheetByName('songs');
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -932,6 +966,15 @@ function appendSongs_(ss, bookCode, entries) {
     rows.push(buildSongRow_(headers, bookCode, entries[e], FORMULA_COLUMNS));
   }
 
+  if (!rows.length) return 0;
+
+  // 드롭다운이 걸린 열(집코드·상태·절기·출처)에 허용 밖의 값이 하나라도 있으면
+  // setValues가 묶음 전체를 죽인다. 먼저 걸러 내고 무엇이 걸렸는지 남긴다.
+  var split = splitByValidation_(sheet, headers, rows);
+  if (rejected) {
+    split.bad.forEach(function (b) { rejected.push(bookCode + ' — ' + b.reason); });
+  }
+  rows = split.ok;
   if (!rows.length) return 0;
 
   var startRow = sheet.getLastRow() + 1;

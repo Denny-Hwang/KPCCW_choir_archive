@@ -197,11 +197,11 @@ function installValidations_(ss) {
 
   if (displayRange) {
     ['곡1', '곡2', '곡3'].forEach(function (name) {
-      applyRangeValidation_(services, name, displayRange);
+      applyRangeValidation_(services, name, displayRange, 'songs 시트의 표시명');
     });
-    applyRangeValidation_(links, '표시명', displayRange);
+    applyRangeValidation_(links, '표시명', displayRange, 'songs 시트의 표시명');
   }
-  if (bookRange) applyRangeValidation_(songs, '집코드', bookRange);
+  if (bookRange) applyRangeValidation_(songs, '집코드', bookRange, 'books 시트의 집코드');
 
   applyListValidation_(songs, '상태', STATUSES);
   applyListValidation_(songs, '절기', SEASONS);
@@ -234,14 +234,23 @@ function namedColumnRange_(sheet, name) {
   return bodyRange_(sheet, name);
 }
 
-function applyRangeValidation_(sheet, name, sourceRange) {
+/**
+ * 도움말 문구에 **어느 시트의 어느 열**이 원본인지 넣는다.
+ * 이 문구는 사람이 잘못 입력했을 때만 뜨는 게 아니라, 스크립트의 setValues가
+ * 막혔을 때 예외 메시지로도 그대로 나온다. 모든 열이 같은 문구를 쓰면
+ * 그 예외만 보고는 어느 열이 막혔는지 알 수가 없다.
+ */
+function applyRangeValidation_(sheet, name, sourceRange, sourceLabel) {
   var range = bodyRange_(sheet, name);
   if (!range) return;
   range.setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInRange(sourceRange, true)
       .setAllowInvalid(false)
-      .setHelpText('songs 시트의 표시명 중에서 고르세요. 직접 입력하면 앱에서 곡을 못 찾습니다.')
+      .setHelpText(
+        sheet.getName() + ' 시트의 ' + name + ' 칸입니다. ' + sourceLabel +
+          ' 중에서 고르세요. 직접 입력하면 앱에서 찾지 못합니다.'
+      )
       .build()
   );
 }
