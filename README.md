@@ -69,14 +69,21 @@ Apps Script 편집기에서 **배포 > 새 배포 > 웹 앱**:
    (건너뛰어도 된다 — 앱의 설정 화면에서 각자 넣을 수 있다.)
 4. `main`에 푸시하면 배포된다.
 
-> **deploy 잡이 스텝 없이 1초 만에 실패하고 로그도 비어 있다면**, 잡이 시작조차
-> 못 한 것이다. 코드가 아니라 저장소 설정 문제이고, 웹 UI의 잡 화면 상단 주석에만
-> 실제 사유가 뜬다 (API 로그는 404다). 확인 순서:
+> **deploy 잡이 스텝 없이 1초 만에 실패하고 로그도 비어 있다면** 잡이 시작조차 못 한
+> 것이다. 코드가 아니라 저장소 설정 문제다. API 로그는 404라서, 실제 사유는 웹 UI의
+> 잡 화면 상단 주석에만 뜬다.
 >
-> 1. Settings > Pages > Source가 **GitHub Actions**인가
-> 2. Settings > Environments > `github-pages`의 deployment branch 정책이 `main`을 허용하는가
->    — 환경이 처음 만들어질 때의 브랜치 이름이 그대로 박혀 있을 수 있다
-> 3. 그 환경에 required reviewers가 걸려 있지 않은가
+> 이 저장소가 실제로 겪은 사유는 이것이었다:
+>
+> ```
+> Branch "main" is not allowed to deploy to github-pages
+> due to environment protection rules.
+> ```
+>
+> `github-pages` 환경은 Pages를 처음 켤 때의 브랜치 이름을 deployment branch 정책에
+> 박아 두고, **나중에 기본 브랜치를 바꿔도 그 정책은 따라 바뀌지 않는다.**
+> Settings > Environments > `github-pages` > Deployment branches and tags에서
+> `main`을 규칙에 추가하거나 `No restriction`으로 바꾼다.
 
 ### 4. 데이터 넣기
 
