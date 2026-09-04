@@ -43,6 +43,11 @@ jobs:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
 
       - uses: actions/configure-pages@v5
+        with:
+          # Pages가 꺼져 있으면 켠다. 기본값(false)이면 "Get Pages site failed ... Not Found"로
+          # 빌드가 통과한 뒤 배포 직전에 멈춘다 — 저장소 설정을 손대야만 풀리는 상태가 된다.
+          # pages: write 권한이 이미 있으므로 여기서 해결하는 편이 낫다.
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
