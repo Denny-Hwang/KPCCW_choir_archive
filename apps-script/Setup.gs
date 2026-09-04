@@ -25,6 +25,7 @@ var CONFIG_DEFAULTS = [
   ['공지_빈줄구분', 'FALSE'],
   ['공지_파트순서', '합창,소프라노,알토,테너,베이스,반주'],
   ['앱_제목', '○○교회 성가대'],
+  ['시간대', 'America/Los_Angeles'],
   ['데이터시트목록', 'books,songs,services,rehearsals,practice_links,config'],
   ['유튜브채널핸들', 'JandAArt'],
   ['연습기본패턴', '주일 13:30, 수요일 20:00'],

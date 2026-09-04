@@ -26,11 +26,26 @@ describe('dateKey', () => {
     expect(dateKey('2026-08-23')).toBe('2026-08-23')
   })
 
-  it('시각이 붙은 ISO는 시트 시간대(KST)로 환산한다', () => {
-    // Apps Script가 KST 자정 셀을 직렬화하면 전날 15:00Z가 된다. 하루 밀리면 안 된다.
-    expect(dateKey('2026-08-22T15:00:00.000Z')).toBe('2026-08-23')
-    expect(dateKey('2026-08-23T00:00:00.000Z')).toBe('2026-08-23')
-    expect(dateKey('2026-12-31T15:00:00.000Z')).toBe('2027-01-01')
+  it('시각이 붙은 ISO는 시트 시간대(기본 미국 태평양)로 환산한다', () => {
+    // PDT(UTC-7) 자정 셀은 같은 날 07:00Z로 직렬화된다.
+    expect(dateKey('2026-08-23T07:00:00.000Z')).toBe('2026-08-23')
+    // UTC로는 이미 다음 날이지만 태평양 시간으로는 아직 8월 23일이다.
+    expect(dateKey('2026-08-24T06:59:00.000Z')).toBe('2026-08-23')
+  })
+
+  it('썸머타임 전환을 넘어서도 맞는다', () => {
+    // PST(UTC-8) 구간. 겨울에는 오프셋이 한 시간 늘어난다.
+    expect(dateKey('2026-01-15T08:00:00.000Z')).toBe('2026-01-15')
+    expect(dateKey('2026-01-16T07:59:00.000Z')).toBe('2026-01-15')
+  })
+
+  it('시간대를 넘겨주면 그 기준으로 읽는다', () => {
+    expect(dateKey('2026-08-22T15:00:00.000Z', 'Asia/Seoul')).toBe('2026-08-23')
+    expect(dateKey('2026-08-22T15:00:00.000Z', 'UTC')).toBe('2026-08-22')
+  })
+
+  it('알 수 없는 시간대 이름은 기본값으로 되돌린다', () => {
+    expect(dateKey('2026-08-23T07:00:00.000Z', 'Mars/Olympus')).toBe('2026-08-23')
   })
 
   it('점·슬래시 구분자를 받는다', () => {
@@ -51,8 +66,8 @@ describe('dateKey', () => {
 describe('timeKey', () => {
   it('여러 표기를 HH:MM으로 모은다', () => {
     expect(timeKey('13:30')).toBe('13:30')
-    expect(timeKey('2026-08-23T13:30:00+09:00')).toBe('13:30')
-    expect(timeKey('2026-08-23T04:30:00.000Z')).toBe('13:30')
+    expect(timeKey('2026-08-23T13:30:00-07:00')).toBe('13:30')
+    expect(timeKey('2026-08-23T20:30:00.000Z')).toBe('13:30')
     expect(timeKey('오후 1시 30분')).toBe('13:30')
     expect(timeKey('8시')).toBe('08:00')
     expect(timeKey(new Date(2026, 0, 1, 20, 0))).toBe('20:00')
@@ -70,6 +85,21 @@ describe('parseService', () => {
 
   it('헤더에 공백이 섞여도 같은 열로 본다', () => {
     expect(parseService({ '찬양일 ': '2026-08-23', 'S 인원': 8 }).S인원).toBe(8)
+  })
+})
+
+describe('시간대 설정', () => {
+  it('config의 시간대가 날짜 해석에 실제로 반영된다', () => {
+    const payload = {
+      config: [{ 키: '시간대', 값: 'Asia/Seoul' }],
+      services: [{ 찬양일: '2026-08-22T15:00:00.000Z', 곡1: '가곡 (중47-01)' }],
+    }
+    expect(parsePayload(payload).services[0].찬양일).toBe('2026-08-23')
+  })
+
+  it('시간대를 지정하지 않으면 미국 태평양 기준', () => {
+    const payload = { services: [{ 찬양일: '2026-08-24T06:59:00.000Z', 곡1: '가곡 (중47-01)' }] }
+    expect(parsePayload(payload).services[0].찬양일).toBe('2026-08-23')
   })
 })
 

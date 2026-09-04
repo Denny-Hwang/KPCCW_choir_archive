@@ -1056,6 +1056,10 @@
       "값": "성가대 아카이브 (예시)"
     },
     {
+      "키": "시간대",
+      "값": "America/Los_Angeles"
+    },
+    {
       "키": "데이터시트목록",
       "값": "books,songs,services,rehearsals,practice_links,config"
     },

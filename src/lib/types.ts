@@ -96,6 +96,8 @@ export interface AppConfig {
   공지_빈줄구분: boolean
   공지_파트순서: Part[]
   앱_제목: string
+  /** 시트의 IANA 시간대. 날짜·시각 해석의 기준 (기본 America/Los_Angeles). */
+  시간대: string
   유튜브채널핸들: string
   연습기본패턴: string
   중복경고개월: number

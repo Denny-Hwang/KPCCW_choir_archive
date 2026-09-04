@@ -35,7 +35,7 @@ function doGet() {
 
 function buildPayload_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var tz = ss.getSpreadsheetTimeZone() || 'Asia/Seoul';
+  var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
   var sheetNames = resolveDataSheets_(ss);
 
   var payload = { updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ssXXX") };
@@ -113,8 +113,9 @@ function readSheet_(ss, name, tz) {
 /**
  * Date를 시트 시간대의 문자열로 바꾼다.
  *
- * JSON.stringify는 Date를 UTC ISO로 바꾸는데, KST 자정은 전날 15:00Z가 되어
- * 클라이언트가 그냥 자르면 날짜가 하루 밀린다. 그래서 여기서 확정한다.
+ * JSON.stringify는 Date를 UTC ISO로 바꾼다. 시트 시간대가 UTC+ 지역이면 자정이
+ * 전날로 넘어가 클라이언트가 그냥 자를 때 날짜가 하루 밀리고, PDT/PST처럼 UTC- 지역이면
+ * 밀리지는 않지만 시각이 어긋난다. 어느 쪽이든 여기서 확정하는 것이 옳다.
  * 날짜/시각 구분은 시트 에폭(1899-12-30)인지로 판정한다 — 시각 전용 셀이 그 날짜를 쓴다.
  */
 function normalizeCell_(value, tz) {

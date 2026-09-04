@@ -47,16 +47,32 @@ export function bool(v: unknown): boolean {
 }
 
 /**
- * 시트의 시간대. Apps Script는 Date 셀을 UTC 기준 ISO로 직렬화하므로,
- * KST 자정(=전날 15:00Z)을 그대로 잘라 쓰면 날짜가 하루 밀린다.
- * 서버(Code.gs)에서 문자열로 포맷해 내려주는 것이 1차 방어이고, 이건 2차 방어다.
+ * 시트의 시간대.
+ *
+ * Apps Script는 Date 셀을 UTC 기준 ISO로 직렬화한다. PDT(UTC-7) 자정은 같은 날
+ * 07:00Z가 되므로 날짜가 밀리지 않지만, PST(UTC-8)로 넘어간 겨울에도 마찬가지고
+ * 반대로 UTC+ 지역이면 하루가 밀린다. 어느 쪽이든 시간대를 알아야 정확하다.
+ *
+ * 1차 방어는 서버(Code.gs)가 시트 시간대로 포맷한 문자열을 내려주는 것이고,
+ * 이건 2차 방어다. config 시트의 `시간대` 키로 바꿀 수 있다.
  */
-const SHEET_TIMEZONE = 'Asia/Seoul'
+export const DEFAULT_TIMEZONE = 'America/Los_Angeles'
+
+/** 알 수 없는 IANA 이름이면 Intl이 예외를 던진다. 그때는 기본값으로 되돌린다. */
+function safeTimeZone(tz: string | undefined): string {
+  if (!tz) return DEFAULT_TIMEZONE
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz })
+    return tz
+  } catch {
+    return DEFAULT_TIMEZONE
+  }
+}
 
 /** 순간(instant)을 시트 시간대의 연/월/일/시/분으로 읽는다. */
-function partsInSheetZone(date: Date): { y: string; m: string; d: string; hh: string; mm: string } {
+function partsInZone(date: Date, tz: string): { y: string; m: string; d: string; hh: string; mm: string } {
   const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: SHEET_TIMEZONE,
+    timeZone: tz,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -77,7 +93,7 @@ function partsInSheetZone(date: Date): { y: string; m: string; d: string; hh: st
 }
 
 /** 무엇이 들어와도 YYYY-MM-DD로 만든다. 읽을 수 없으면 빈 문자열. */
-export function dateKey(v: unknown): string {
+export function dateKey(v: unknown, tz: string = DEFAULT_TIMEZONE): string {
   if (v instanceof Date && !Number.isNaN(v.getTime())) {
     return `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`
   }
@@ -89,7 +105,7 @@ export function dateKey(v: unknown): string {
   if (instant) {
     const parsed = new Date(s)
     if (!Number.isNaN(parsed.getTime())) {
-      const { y, m, d } = partsInSheetZone(parsed)
+      const { y, m, d } = partsInZone(parsed, safeTimeZone(tz))
       return `${y}-${m}-${d}`
     }
   }
@@ -108,20 +124,20 @@ export function dateKey(v: unknown): string {
 }
 
 /** 시각을 HH:MM으로. Date 직렬화 결과와 "13:30", "1:30 PM", "오후 1시 30분"을 받는다. */
-export function timeKey(v: unknown): string {
+export function timeKey(v: unknown, tz: string = DEFAULT_TIMEZONE): string {
   if (v instanceof Date && !Number.isNaN(v.getTime())) {
     return `${pad2(v.getHours())}:${pad2(v.getMinutes())}`
   }
   const s = str(v)
   if (!s) return ''
 
-  // 시각 전용 셀은 1899-12-30(시트 에폭) 기준 ISO로 내려온다. 그 시절 한국 표준시는
-  // +09:00이 아니라 LMT(+08:27:52)라서, 같은 시간대 규칙으로 되돌려야만 값이 맞는다.
-  // 그래서 여기서도 로컬이 아닌 시트 시간대로 환산한다.
+  // 시각 전용 셀은 1899-12-30(시트 에폭) 기준 ISO로 내려온다. 그 시절에는 표준시가
+  // 아직 지금 형태가 아니어서(로스앤젤레스는 LMT -07:52:58) 고정 오프셋으로 계산하면 틀린다.
+  // 같은 시간대 규칙으로 되돌려야만 값이 맞으므로, 여기서도 로컬이 아닌 시트 시간대로 환산한다.
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
     const parsed = new Date(s)
     if (!Number.isNaN(parsed.getTime())) {
-      const { hh, mm } = partsInSheetZone(parsed)
+      const { hh, mm } = partsInZone(parsed, safeTimeZone(tz))
       return `${hh}:${mm}`
     }
   }
@@ -226,10 +242,10 @@ export function parseSong(row: RawRow): Song {
   }
 }
 
-export function parseService(row: RawRow): Service {
+export function parseService(row: RawRow, tz: string = DEFAULT_TIMEZONE): Service {
   const 곡 = [str(pick(row, '곡1')), str(pick(row, '곡2')), str(pick(row, '곡3'))].filter(Boolean)
   return {
-    찬양일: dateKey(pick(row, '찬양일')),
+    찬양일: dateKey(pick(row, '찬양일'), tz),
     예배구분: str(pick(row, '예배구분')),
     곡,
     S인원: num(pick(row, 'S인원')),
@@ -242,11 +258,11 @@ export function parseService(row: RawRow): Service {
   }
 }
 
-export function parseRehearsal(row: RawRow): Rehearsal {
+export function parseRehearsal(row: RawRow, tz: string = DEFAULT_TIMEZONE): Rehearsal {
   return {
-    찬양일: dateKey(pick(row, '찬양일')),
-    연습일: dateKey(pick(row, '연습일')),
-    시각: timeKey(pick(row, '시각')),
+    찬양일: dateKey(pick(row, '찬양일'), tz),
+    연습일: dateKey(pick(row, '연습일'), tz),
+    시각: timeKey(pick(row, '시각'), tz),
     구분: str(pick(row, '구분')),
     장소: str(pick(row, '장소')),
     메모: str(pick(row, '메모')),
@@ -272,6 +288,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   공지_빈줄구분: false,
   공지_파트순서: [...PART_ORDER],
   앱_제목: '성가대 아카이브',
+  시간대: DEFAULT_TIMEZONE,
   유튜브채널핸들: 'JandAArt',
   연습기본패턴: '주일 13:30, 수요일 20:00',
   중복경고개월: 12,
@@ -317,6 +334,7 @@ export function parseConfig(input: RawRow[] | Record<string, unknown> | undefine
     공지_빈줄구분: bool(raw['공지_빈줄구분']),
     공지_파트순서: parts.length ? parts : DEFAULT_CONFIG.공지_파트순서,
     앱_제목: raw['앱_제목'] || DEFAULT_CONFIG.앱_제목,
+    시간대: safeTimeZone(raw['시간대']),
     유튜브채널핸들: raw['유튜브채널핸들'] || DEFAULT_CONFIG.유튜브채널핸들,
     연습기본패턴: raw['연습기본패턴'] || DEFAULT_CONFIG.연습기본패턴,
     중복경고개월: 중복경고개월 && 중복경고개월 > 0 ? 중복경고개월 : DEFAULT_CONFIG.중복경고개월,
@@ -331,15 +349,18 @@ function rows(v: unknown): RawRow[] {
 
 export function parsePayload(payload: RawPayload | null | undefined): ArchiveData {
   const p = payload ?? {}
+  // 날짜·시각 해석이 시간대에 의존하므로 config를 먼저 읽는다.
+  const config = parseConfig(Array.isArray(p.config) ? rows(p.config) : (p.config as Record<string, unknown>))
+  const tz = config.시간대
   return {
     updatedAt: str(p.updatedAt),
     books: rows(p.books).map(parseBook).filter((b) => b.집코드),
     songs: rows(p.songs).map(parseSong).filter((s) => s.표시명),
-    services: rows(p.services).map(parseService).filter((s) => s.찬양일),
-    rehearsals: rows(p.rehearsals).map(parseRehearsal).filter((r) => r.찬양일 && r.연습일),
+    services: rows(p.services).map((row) => parseService(row, tz)).filter((s) => s.찬양일),
+    rehearsals: rows(p.rehearsals).map((row) => parseRehearsal(row, tz)).filter((r) => r.찬양일 && r.연습일),
     practiceLinks: rows(p.practiceLinks ?? p.practice_links)
       .map(parsePracticeLink)
       .filter((l) => l.표시명 && l.URL),
-    config: parseConfig(Array.isArray(p.config) ? rows(p.config) : (p.config as Record<string, unknown>)),
+    config,
   }
 }
