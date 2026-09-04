@@ -149,6 +149,10 @@ describe('splitByValidation_', () => {
     // 어느 열의 어느 값이 걸렸는지 말해 준다. 시트가 던지는 예외는 이걸 말해 주지 않는다.
     expect(r.bad[0].reason).toContain('파트')
     expect(r.bad[0].reason).toContain('지휘')
+    // 허용값이 몇 개이고 어디서 왔는지까지 붙인다. 범위가 굳어 새 곡을 못 담는 경우,
+    // 이 두 가지가 없으면 "왜 목록에 없지?"에서 더 나아갈 수가 없다.
+    expect(r.bad[0].reason).toContain('6개 중에 없음')
+    expect(r.bad[0].reason).toContain('원본:')
   })
 
   it('빈 칸은 시트도 허용하므로 걸러 내지 않는다', () => {

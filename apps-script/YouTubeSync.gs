@@ -580,6 +580,12 @@ function matchVideos() {
   var ss = getSpreadsheet_();
   var tz = ss.getSpreadsheetTimeZone();
 
+  // 드롭다운의 원본 범위는 만들어질 때의 행 수로 굳는다(songs!B2:B1000 같은 식).
+  // 그 뒤 [악보집 일괄 등록]으로 곡이 늘어나면 새 곡은 목록 밖에 남고,
+  // 그 표시명을 practice_links에 쓰려는 순간 전부 거부된다.
+  // 다시 심는 것은 값이 아니라 규칙뿐이라 데이터는 그대로다.
+  installValidations_(ss);
+
   var cache = readCacheRows_(ss);
   if (!cache.length) {
     ui.alert('yt_cache가 비어 있습니다. 먼저 "채널 동기화"를 실행하세요.');
@@ -589,6 +595,7 @@ function matchVideos() {
   var songs = readSheet_(ss, 'songs', tz);
   var byCode = {};
   var byBookAndTitle = {};
+  var booksWithSongs = {};
   for (var s = 0; s < songs.length; s++) {
     var song = songs[s];
     var code = String(song['곡코드'] || '').trim();
@@ -596,7 +603,10 @@ function matchVideos() {
     if (!display) continue;
     if (code) byCode[code] = display;
     var bookCode = String(song['집코드'] || '').trim();
-    if (bookCode) byBookAndTitle[bookCode + '|' + normalizeTitle_(song['제목'])] = display;
+    if (bookCode) {
+      byBookAndTitle[bookCode + '|' + normalizeTitle_(song['제목'])] = display;
+      booksWithSongs[bookCode] = true;
+    }
   }
 
   var links = readSheet_(ss, 'practice_links', tz);
@@ -609,6 +619,7 @@ function matchVideos() {
   // 41집 이후는 같은 곡이 두 벌로 올라오는데, 연습에는 실연 녹음이 낫다.
   var candidates = {};
   var failures = [];
+  var notOwned = {};
   var midiOnly = 0;
 
   for (var c = 0; c < cache.length; c++) {
@@ -618,6 +629,13 @@ function matchVideos() {
     var bookCode = parsePlaylistBook_(entry['재생목록명']) || parsed.bookCode;
 
     if (!bookCode) continue; // 중앙성가 집이 아닌 영상. 실패로 세지 않는다.
+
+    // songs에 한 곡도 없는 권은 우리가 안 가진 권이다. 채널에는 40여 권이 올라와 있어서
+    // 이걸 실패로 세면 실패 수천 건에 진짜 실패가 묻힌다.
+    if (!booksWithSongs[bookCode]) {
+      notOwned[bookCode] = (notOwned[bookCode] || 0) + 1;
+      continue;
+    }
 
     var display = null;
     if (parsed.number) display = byCode[bookCode + '-' + padNumber_(parsed.number)] || null;
@@ -659,10 +677,19 @@ function matchVideos() {
   var report = split.bad.map(function (b) { return '시트가 거부함 / ' + b.reason; });
   writeReport_(ss, report.concat(failures));
 
+  var notOwnedCodes = Object.keys(notOwned).sort(function (a, b) {
+    return bookNumber_(a) - bookNumber_(b);
+  });
+  var notOwnedTotal = 0;
+  notOwnedCodes.forEach(function (c) { notOwnedTotal += notOwned[c]; });
+
   ui.alert(
     '영상 매칭 완료',
     '추가 ' + split.ok.length + '개 (전부 검증 대기)\n' +
       (midiOnly ? '그중 ' + midiOnly + '개는 실연이 없어 MIDI를 썼습니다.\n' : '') +
+      (notOwnedTotal
+        ? '보유하지 않은 권이라 건너뜀 ' + notOwnedTotal + '개 (' + notOwnedCodes.join(', ') + ')\n'
+        : '') +
       '매칭 실패 ' + failures.length + '건\n' +
       (split.bad.length ? '시트가 거부한 행 ' + split.bad.length + '개 — ' + split.bad[0].reason + '\n' : '') +
       '\n' +
@@ -687,20 +714,25 @@ function allowedValues_(sheet, headerName) {
   var type = rule.getCriteriaType();
   var args = rule.getCriteriaValues();
   var list;
+  var source;
   if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE) {
     list = args[0].getValues().map(function (r) { return r[0]; });
+    // 어느 범위를 보고 있는지 남긴다. 범위가 굳어 새 곡을 못 담는 일이 실제로 있었다.
+    source = args[0].getSheet().getName() + '!' + args[0].getA1Notation();
   } else if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) {
     list = args[0];
+    source = '목록 [' + args[0].join(', ') + ']';
   } else {
     return null; // 우리가 쓰는 두 종류가 아니면 검사하지 않는다.
   }
 
   var set = {};
+  var count = 0;
   for (var i = 0; i < list.length; i++) {
     var v = String(list[i] === null || list[i] === undefined ? '' : list[i]).trim();
-    if (v) set[v] = true;
+    if (v && !set[v]) { set[v] = true; count++; }
   }
-  return set;
+  return { set: set, source: source, count: count };
 }
 
 /**
@@ -719,7 +751,7 @@ function splitByValidation_(sheet, headers, rows) {
     var name = String(headers[h]).trim();
     if (!name) continue;
     var allowed = allowedValues_(sheet, name);
-    if (allowed) checks.push({ name: name, index: h, allowed: allowed });
+    if (allowed) checks.push({ name: name, index: h, rule: allowed });
   }
   if (!checks.length) return { ok: rows, bad: [] };
 
@@ -730,8 +762,9 @@ function splitByValidation_(sheet, headers, rows) {
     for (var c = 0; c < checks.length; c++) {
       var value = rows[r][checks[c].index];
       if (value === '' || value === null || value === undefined) continue;
-      if (!checks[c].allowed[String(value).trim()]) {
-        reason = checks[c].name + ' = "' + value + '" — 드롭다운 목록에 없는 값';
+      if (!checks[c].rule.set[String(value).trim()]) {
+        reason = checks[c].name + ' = "' + value + '" — 허용값 ' + checks[c].rule.count +
+          '개 중에 없음 (원본: ' + checks[c].rule.source + ')';
         break;
       }
     }
@@ -912,6 +945,9 @@ function registerOwnedBooks() {
     return;
   }
 
+  // songs.집코드 드롭다운의 원본은 books다. books에 권이 늘었으면 범위를 다시 심어야 한다.
+  installValidations_(ss);
+
   var added = [];
   var missing = [];
   var rejected = [];
@@ -934,7 +970,7 @@ function registerOwnedBooks() {
         : '') +
       (rejected.length
         ? '시트가 거부한 행 ' + rejected.length + '개:\n  ' + rejected.slice(0, 5).join('\n  ') + '\n' +
-          '해당 열의 드롭다운 목록에 그 값이 없습니다. [시트 초기화]를 다시 실행하면 목록이 갱신됩니다.\n\n'
+          '드롭다운 원본을 다시 심고도 걸린 값입니다. 위 원본 범위를 시트에서 직접 확인하세요.\n\n'
         : '') +
       '전부 상태=후보, 검증=FALSE로 들어갔습니다.\n' +
       '이어서 [영상 매칭]을 실행하면 파트 영상이 채워집니다.',
@@ -980,7 +1016,7 @@ function registerBookPrompt() {
     bookCode + ' · ' + added + '곡 추가 (전부 상태=후보, 검증=FALSE)\n\n' +
       (rejected.length
         ? '시트가 거부한 행 ' + rejected.length + '개:\n  ' + rejected.slice(0, 5).join('\n  ') + '\n' +
-          '해당 열의 드롭다운 목록에 그 값이 없습니다. [시트 초기화]를 다시 실행하면 목록이 갱신됩니다.\n\n'
+          '드롭다운 원본을 다시 심고도 걸린 값입니다. 위 원본 범위를 시트에서 직접 확인하세요.\n\n'
         : '') +
       '이어서 "영상 매칭"을 실행하면 파트 영상이 검증 대기 상태로 채워집니다.',
     ui.ButtonSet.OK
