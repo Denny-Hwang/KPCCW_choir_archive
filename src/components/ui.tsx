@@ -93,12 +93,14 @@ export function Spinner({ label = '불러오는 중' }: { label?: string }) {
 }
 
 /**
- * 예배 실황 영상 링크 (§4.3 기록영상URL, §11의 "유튜브가 아닌 경우" 항목).
+ * 예배 실황 영상 버튼 (§4.3 기록영상URL, §11의 "유튜브가 아닌 경우" 항목).
  *
- * 그 날의 기록영상이 있으면 그것을 쓰고, 없으면 교회 홈페이지의 예배 영상 페이지로 보낸다.
+ * 그 날의 기록영상이 있으면 그것을 쓰고, 없으면 교회 홈페이지의 예배 영상 게시판으로 보낸다.
  * 유튜브가 아닌 주소도 그대로 링크한다 — 교회 홈페이지에 올라오는 것이 원래 형태다.
+ *
+ * 작은 밑줄 링크로는 눈에 띄지 않아 버튼으로 만든다. 색은 아카이브의 `실황영상` 칩과 맞춘다.
  */
-export function RecordingLink({
+export function RecordingButton({
   recordingUrl,
   fallbackUrl,
   className = '',
@@ -117,9 +119,12 @@ export function RecordingLink({
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className={`inline-flex items-center gap-1 underline decoration-stone-300 underline-offset-2 hover:text-stone-700 ${className}`}
+      className={`btn w-full bg-rose-600 text-white hover:bg-rose-500 ${className}`}
     >
-      {own ? '기록영상 보기' : '교회 홈페이지에서 예배 영상 보기'}
+      <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 shrink-0 fill-current">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+      {own ? '이 날 실황영상 보기' : '교회 홈페이지에서 예배 영상 보기'}
     </a>
   )
 }

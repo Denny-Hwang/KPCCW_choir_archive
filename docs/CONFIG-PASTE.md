@@ -11,7 +11,7 @@
 공지_파트순서	합창,소프라노,알토,테너,베이스,반주
 앱_제목	중부워싱턴한인장로교회 성가대
 교회홈페이지	https://www.kpccw.org/
-예배영상URL	https://www.kpccw.org/
+예배영상URL	https://www.kpccw.org/main/sub.html?pageCode=18&vodType=7
 시간대	America/Los_Angeles
 데이터시트목록	books,songs,services,rehearsals,practice_links,config
 유튜브채널핸들	JandAArt
@@ -26,7 +26,7 @@
 | `앱_제목` | 중부워싱턴한인장로교회 성가대 | 시트에 `○○교회 성가대`가 남아 있으면 앱에 그대로 나온다 |
 | `공지_빈줄구분` | TRUE | 실제 카톡 공지에는 구역·파트 사이에 빈 줄이 있다 |
 | `교회홈페이지` | https://www.kpccw.org/ | 화면 하단 링크 |
-| `예배영상URL` | https://www.kpccw.org/ | 실황영상 안내 |
+| `예배영상URL` | …?pageCode=18&vodType=7 | 성가대 영상 게시판. 홈페이지 첫 화면이면 영상까지 못 간다 |
 | `유튜브채널ID` | (비어 있음) | 채널 ID를 넣으면 핸들 조회를 건너뛴다 |
 
 > 시트에 값이 있으면 **언제나 시트가 이긴다.** 코드 기본값은 키가 없을 때만 쓰인다.

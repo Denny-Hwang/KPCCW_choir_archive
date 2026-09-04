@@ -290,7 +290,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   앱_제목: '중부워싱턴한인장로교회 성가대',
   시간대: DEFAULT_TIMEZONE,
   교회홈페이지: 'https://www.kpccw.org/',
-  예배영상URL: 'https://www.kpccw.org/',
+  예배영상URL: 'https://www.kpccw.org/main/sub.html?pageCode=18&vodType=7',
   유튜브채널핸들: 'JandAArt',
   연습기본패턴: '주일 13:30, 수요일 20:00',
   중복경고개월: 12,

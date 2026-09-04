@@ -26,7 +26,7 @@ var CONFIG_DEFAULTS = [
   ['공지_파트순서', '합창,소프라노,알토,테너,베이스,반주'],
   ['앱_제목', '중부워싱턴한인장로교회 성가대'],
   ['교회홈페이지', 'https://www.kpccw.org/'],
-  ['예배영상URL', 'https://www.kpccw.org/'],
+  ['예배영상URL', 'https://www.kpccw.org/main/sub.html?pageCode=18&vodType=7'],
   ['시간대', 'America/Los_Angeles'],
   ['데이터시트목록', 'books,songs,services,rehearsals,practice_links,config'],
   ['유튜브채널핸들', 'JandAArt'],
@@ -95,7 +95,9 @@ var CONFIG_PLACEHOLDERS = {
   '앱_제목': ['○○교회 성가대', '성가대 아카이브'],
   // 실제 카톡 공지에는 빈 줄이 있다는 것을 나중에 확인했다. 예전 기본값 FALSE는
   // 총무가 고른 값이 아니라 우리가 잘못 넣어 둔 값이므로 올린다.
-  '공지_빈줄구분': ['FALSE']
+  '공지_빈줄구분': ['FALSE'],
+  // 홈페이지 첫 화면으로는 영상까지 도달하지 못한다. 게시판 주소로 올린다.
+  '예배영상URL': ['https://www.kpccw.org/']
 };
 
 function seedConfig_(ss) {

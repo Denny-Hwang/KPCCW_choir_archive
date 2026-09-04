@@ -4,7 +4,7 @@ import { useArchive } from '../lib/useArchive'
 import { groupServicesByMonth, totalAttendance } from '../lib/derive'
 import { formatMonth, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
 import { normalizeLink } from '../lib/youtube'
-import { Empty, RecordingLink, Spinner } from '../components/ui'
+import { Empty, RecordingButton, Spinner } from '../components/ui'
 import { PartLinkChips } from '../components/PartLinks'
 
 /** 월별 아카이브 (§6.2). 연도 경계는 저장이 평면이라 자연히 넘어간다 (§3). */
@@ -32,10 +32,10 @@ export default function Archive() {
   return (
     <div className="space-y-4">
       {data.config.예배영상URL && (
-        <p className="rounded-xl bg-stone-100 px-3 py-2 text-xs text-stone-600">
-          예배 실황 영상은 교회 홈페이지에 올라옵니다.{' '}
-          <RecordingLink fallbackUrl={data.config.예배영상URL} className="font-semibold" />
-        </p>
+        <div className="card space-y-2 p-3">
+          <p className="text-xs text-stone-600">예배 실황 영상은 교회 홈페이지에 올라옵니다.</p>
+          <RecordingButton fallbackUrl={data.config.예배영상URL} />
+        </div>
       )}
 
       <div className="flex flex-wrap gap-1">
