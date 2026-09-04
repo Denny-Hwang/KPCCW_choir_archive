@@ -10,7 +10,8 @@
     "lint": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "node scripts/run.mjs"
+    "verify": "node scripts/run.mjs",
+    "find-recordings": "node scripts/find-recordings.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
