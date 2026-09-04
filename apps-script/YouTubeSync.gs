@@ -161,7 +161,7 @@ function resolveChannelId_(ss) {
     return configured;
   }
 
-  var handle = readConfigValue_(ss, '유튜브채널핸들') || DEFAULT_CHANNEL_HANDLE;
+  var handle = normalizeHandle_(readConfigValue_(ss, '유튜브채널핸들')) || DEFAULT_CHANNEL_HANDLE;
   var reason = '';
 
   try {
@@ -198,6 +198,18 @@ function resolveChannelId_(ss) {
 
   props.setProperty('CHANNEL_ID', typed);
   return typed;
+}
+
+/**
+ * 핸들만 뽑는다. config에 `@JandAArt`나 채널 주소를 통째로 넣어도 되게 한다.
+ * forHandle은 @가 붙어도 받지만, 주소를 통째로 넣으면 실패한다.
+ */
+function normalizeHandle_(value) {
+  var v = String(value || '').trim();
+  if (!v) return '';
+  var fromUrl = v.match(/youtube\.com\/@([A-Za-z0-9._-]+)/i);
+  if (fromUrl) return fromUrl[1];
+  return v.replace(/^@/, '');
 }
 
 /** 채널 ID만 뽑는다. 전체 주소를 붙여넣어도 되게 한다. */
