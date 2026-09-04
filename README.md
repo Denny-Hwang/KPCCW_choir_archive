@@ -209,3 +209,4 @@ src/lib/
 - [`docs/SPEC.md`](docs/SPEC.md) — 기획서 원문 (v5)
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — 구현하며 내린 판단과 남은 미결정 사항
 - [`docs/BACKFILL-2025-2026.md`](docs/BACKFILL-2025-2026.md) — 2025~2026 과거 기록 붙여넣기 블록
+- [`docs/CONFIG-PASTE.md`](docs/CONFIG-PASTE.md) — config 시트 최신 기본값 붙여넣기 블록
