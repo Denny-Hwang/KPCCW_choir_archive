@@ -7,6 +7,19 @@
  * 이 스크립트는 절대 쓰지 않는다. 쓰기가 필요해지면 별도 배포로 분리한다 (§12.2).
  */
 
+/**
+ * 스크립트가 스프레드시트에 연결되어 있지 않은(독립 실행형) 경우에만 채운다.
+ * 컨테이너 바인딩 스크립트면 비워 둔다.
+ */
+var SHEET_ID = '';
+
+/** 모든 파일이 이 함수로만 스프레드시트를 잡는다. */
+function getSpreadsheet_() {
+  var ss = SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('스프레드시트를 찾지 못했습니다. Code.gs의 SHEET_ID를 채우세요.');
+  return ss;
+}
+
 /** JSON에 내보낼 데이터 시트. config의 `데이터시트목록`이 있으면 그 값이 이긴다. */
 var DEFAULT_DATA_SHEETS = ['books', 'songs', 'services', 'rehearsals', 'practice_links', 'config'];
 
@@ -34,7 +47,7 @@ function doGet() {
 }
 
 function buildPayload_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
   var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
   var sheetNames = resolveDataSheets_(ss);
 
@@ -135,7 +148,16 @@ function normalizeCell_(value, tz) {
   return value;
 }
 
-/** 시트 메뉴. 총무가 스크립트 편집기를 열지 않고 쓸 수 있게 한다. */
+/**
+ * 시트 메뉴. 총무가 스크립트 편집기를 열지 않고 쓸 수 있게 한다.
+ *
+ * onOpen은 프로젝트 전체에서 **하나만** 있어야 한다. Apps Script의 .gs 파일들은
+ * 전역 스코프를 공유하므로, 다른 파일에 같은 이름이 또 있으면 오류 없이
+ * 나중 파일이 이기고 메뉴 하나가 통째로 사라진다.
+ *
+ * 항목 순서는 실제 작업 순서를 따른다:
+ * 시트 준비 → 채널 동기화 → 제목 확인 → 매칭 → 악보집 등록.
+ */
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('성가 아카이브')
@@ -143,10 +165,12 @@ function onOpen() {
     .addItem('연도 뷰 탭 만들기', 'createYearViewPrompt')
     .addSeparator()
     .addItem('채널 동기화', 'syncChannel')
+    .addItem('제목 형식 확인', 'sampleTitles')
     .addItem('영상 매칭', 'matchVideos')
     .addItem('악보집 등록', 'registerBookPrompt')
     .addSeparator()
     .addItem('엔드포인트 점검', 'validateData')
+    .addItem('캐시 비우기', 'clearCache')
     .addToUi();
 }
 
@@ -155,7 +179,7 @@ function onOpen() {
  * 결과는 대화상자로 보여주고, 데이터는 바꾸지 않는다.
  */
 function validateData() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
   var tz = ss.getSpreadsheetTimeZone();
   var problems = [];
 

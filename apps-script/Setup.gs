@@ -39,7 +39,7 @@ var SEASONS = ['대림', '성탄', '사순', '부활', '맥추', '추수감사',
 var SOURCES = ['namuwiki', 'official', 'ocr', 'manual', 'youtube_api', 'youtube_channel'];
 
 function setupSheets() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
 
   for (var name in SHEET_SPEC) {
     var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
@@ -234,7 +234,7 @@ function createYearViewPrompt() {
 }
 
 function createYearView(year) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
   var name = String(year);
   var sheet = ss.getSheetByName(name);
   if (!sheet) sheet = ss.insertSheet(name);

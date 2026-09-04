@@ -1,142 +1,286 @@
 /**
- * 중앙아트TV 채널 미러링 + 매칭 (§9.4).
+ * 중앙아트TV(@JandAArt) 채널 미러링 + 매칭 (§9.4).
  *
- * 곡마다 검색하지 않는다. search.list가 호출당 100 units인 반면 playlistItems.list는
- * 50개당 1 unit이라, 채널 전체를 훑어도 수십 units에 그친다.
+ * 곡마다 검색하지 않는다. 채널 전체를 yt_cache에 한 번 미러링한 뒤 로컬에서 매칭한다.
+ * search.list가 호출당 100 units인 반면 playlistItems.list는 50개당 1 unit이라,
+ * 채널 전체를 훑어도 수십 units에 그친다.
  *
  * 이 구조의 핵심은 비용이 아니라 재실행 가능성이다. 영상 제목 형식은 실제 데이터를
  * 받아보기 전에는 확정할 수 없는데, 캐시가 시트에 있으면 매칭 규칙만 고쳐
  * 할당량을 다시 태우지 않고 몇 번이든 돌릴 수 있다.
  *
- * API 키는 스크립트 속성에 둔다 (파일 > 프로젝트 속성 > 스크립트 속성, 키 이름 YOUTUBE_API_KEY).
- * 서버측이라 프론트엔드에 노출되지 않는다 (§13.3).
+ * 사전 조건: Apps Script 편집기 왼쪽 [서비스] + → YouTube Data API v3 (식별자: YouTube).
+ * 고급 서비스는 실행하는 사람의 OAuth로 동작하므로 API 키를 따로 두지 않는다.
  */
 
-var YT_API = 'https://www.googleapis.com/youtube/v3';
+/** config의 `유튜브채널핸들`이 비어 있을 때 쓰는 기본값. */
+var DEFAULT_CHANNEL_HANDLE = 'JandAArt';
 
-function getApiKey_() {
-  var key = PropertiesService.getScriptProperties().getProperty('YOUTUBE_API_KEY');
-  if (!key) {
-    throw new Error('스크립트 속성에 YOUTUBE_API_KEY가 없습니다. 프로젝트 설정 > 스크립트 속성에서 추가하세요.');
-  }
-  return key;
-}
+/** 6분 실행 제한 전에 안전하게 중단하고 이어서 실행할 수 있게 한다. */
+var MAX_RUNTIME_MS = 4.5 * 60 * 1000;
 
-function ytGet_(path, params) {
-  params.key = getApiKey_();
-  var query = Object.keys(params)
-    .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); })
-    .join('&');
-  var response = UrlFetchApp.fetch(YT_API + path + '?' + query, { muteHttpExceptions: true });
-  var body = response.getContentText();
-  if (response.getResponseCode() !== 200) {
-    throw new Error('YouTube API 오류 ' + response.getResponseCode() + ': ' + body.slice(0, 300));
-  }
-  return JSON.parse(body);
-}
+/** 재생목록에 들어가지 않은 영상까지 훑을지. 켜면 행이 크게 늘어난다. */
+var INCLUDE_UPLOADS = false;
 
-/** [1단계] 채널 미러링. yt_cache에 videoId 기준으로 upsert 한다. */
+var CACHE_HEADERS = ['videoId', '제목', '재생목록명', 'playlistId',
+                     '재생목록내순서', '게시일', '수집일시'];
+
+/**
+ * [1단계] 채널 미러링 — 메뉴: 성가 아카이브 > 채널 동기화
+ *
+ * 시간 제한에 걸리면 RESUME_INDEX를 남기고 중단한다. 다시 실행하면 이어서 진행한다.
+ */
 function syncChannel() {
   var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var handle = readConfigValue_(ss, '유튜브채널핸들') || 'JandAArt';
+  var t0 = Date.now();
+  var props = PropertiesService.getScriptProperties();
 
   try {
-    var channel = ytGet_('/channels', { part: 'id,snippet', forHandle: handle });
-    if (!channel.items || !channel.items.length) {
-      ui.alert('채널을 찾지 못했습니다: @' + handle);
-      return;
+    var ss = getSpreadsheet_();
+    var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
+    var sheet = getCacheSheet_(ss);
+    var channelId = resolveChannelId_(ss);
+    var playlists = fetchAllPlaylists_(channelId);
+
+    // 중복 판정은 videoId 단독이 아니라 videoId+playlistId 조합으로 한다.
+    // 같은 영상이 '중앙성가 41집'과 '음원 모음'에 모두 들어 있을 수 있는데,
+    // videoId만으로 걸러내면 집 번호를 알려주는 쪽 행이 사라진다.
+    var seen = loadSeenKeys_(sheet);
+    var stamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
+
+    var added = 0;
+    var startIndex = Number(props.getProperty('RESUME_INDEX') || 0);
+    if (!(startIndex >= 0) || startIndex >= playlists.length) startIndex = 0;
+
+    // 중단 지점을 재생목록 인덱스뿐 아니라 페이지 토큰까지 남긴다.
+    // 인덱스만 남기면 재개할 때마다 그 재생목록을 0쪽부터 다시 훑게 되는데,
+    // 재생목록 하나의 페이지 수가 한 번의 실행 예산을 넘으면 영원히 끝에 닿지 못한다.
+    // 토큰이 어느 재생목록의 것인지도 함께 확인한다 — 채널의 재생목록 순서가
+    // 실행 사이에 바뀌면 엉뚱한 재생목록에 토큰을 쓰게 되기 때문이다.
+    var startToken = props.getProperty('RESUME_TOKEN') || null;
+    if (props.getProperty('RESUME_PLAYLIST_ID') !== (playlists[startIndex] || {}).id) {
+      startToken = null;
     }
-    var channelId = channel.items[0].id;
 
-    var playlists = [];
-    var pageToken = '';
-    do {
-      var page = ytGet_('/playlists', {
-        part: 'id,snippet', channelId: channelId, maxResults: 50, pageToken: pageToken
-      });
-      playlists = playlists.concat(page.items || []);
-      pageToken = page.nextPageToken || '';
-    } while (pageToken);
+    var i = startIndex;
+    var pendingToken = null;
 
-    var rows = [];
-    var now = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+    for (; i < playlists.length; i++) {
+      if (Date.now() - t0 > MAX_RUNTIME_MS) { pendingToken = null; break; }
 
-    for (var p = 0; p < playlists.length; p++) {
-      var playlist = playlists[p];
-      var itemToken = '';
+      var pl = playlists[i];
+      var rows = [];
+      var token = (i === startIndex) ? startToken : null;
+      var exhausted = false;
+
       do {
-        var items = ytGet_('/playlistItems', {
-          part: 'snippet', playlistId: playlist.id, maxResults: 50, pageToken: itemToken
+        var res = YouTube.PlaylistItems.list('snippet', {
+          playlistId: pl.id, maxResults: 50, pageToken: token
         });
-        (items.items || []).forEach(function (item) {
-          var snippet = item.snippet || {};
-          var resource = snippet.resourceId || {};
-          if (!resource.videoId) return;
+
+        (res.items || []).forEach(function (item) {
+          var sn = item.snippet || {};
+          var vid = sn.resourceId && sn.resourceId.videoId;
+          if (!vid) return;
+          // 삭제·비공개 영상은 제목이 자리표시자로 바뀌어 매칭에 쓸 수 없다.
+          if (sn.title === 'Deleted video' || sn.title === 'Private video') return;
+
+          var key = vid + '|' + pl.id;
+          if (seen[key]) return;
+          seen[key] = true;
+
           rows.push([
-            resource.videoId,
-            snippet.title || '',
-            playlist.snippet.title || '',
-            playlist.id,
-            snippet.position != null ? snippet.position + 1 : '',
-            snippet.publishedAt ? String(snippet.publishedAt).slice(0, 10) : '',
-            now
+            vid,
+            sn.title || '',
+            pl.title,
+            pl.id,
+            typeof sn.position === 'number' ? sn.position + 1 : '',
+            sn.publishedAt ? String(sn.publishedAt).slice(0, 10) : '',
+            stamp
           ]);
         });
-        itemToken = items.nextPageToken || '';
-      } while (itemToken);
+
+        token = res.nextPageToken;
+        if (!token) exhausted = true;
+      } while (token && Date.now() - t0 <= MAX_RUNTIME_MS);
+
+      if (rows.length) {
+        sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CACHE_HEADERS.length).setValues(rows);
+        added += rows.length;
+      }
+
+      // 이 재생목록의 페이지가 남았는데 시간이 끊긴 경우.
+      // i를 증가시키지 않고 빠져나와야 다음 실행이 이 재생목록을 이어받는다.
+      // (i++ 뒤에 중단하면 남은 페이지를 영영 못 가져오고, 알림은 완료로 뜬다.)
+      if (!exhausted) { pendingToken = token; break; }
     }
 
-    var added = upsertCache_(ss, rows);
-    ui.alert(
-      '채널 동기화 완료',
-      '재생목록 ' + playlists.length + '개 · 영상 ' + rows.length + '개\n' +
-        '새로 추가 ' + added + '개 (나머지는 갱신)\n\n' +
-        'yt_cache 시트를 열어 영상 제목 형식을 눈으로 확인한 뒤, 필요하면 ' +
-        'YouTubeSync.gs의 parseVideoTitle_ 규칙을 고치고 "영상 매칭"을 다시 실행하세요. ' +
-        '재매칭은 API 할당량을 쓰지 않습니다.',
-      ui.ButtonSet.OK
-    );
+    var message;
+    if (i < playlists.length) {
+      props.setProperty('RESUME_INDEX', String(i));
+      props.setProperty('RESUME_PLAYLIST_ID', playlists[i].id);
+      if (pendingToken) props.setProperty('RESUME_TOKEN', pendingToken);
+      else props.deleteProperty('RESUME_TOKEN');
+      message = '시간 제한으로 중단했습니다.\n\n' +
+        '재생목록 ' + i + '/' + playlists.length + ' 완료, 신규 ' + added + '행 추가.\n' +
+        '[채널 동기화]를 다시 실행하면 중단한 지점부터 이어서 진행합니다.';
+    } else {
+      clearResumeState_(props);
+      message = '완료.\n\n재생목록 ' + playlists.length + '개, 신규 ' + added + '행 추가.\n\n' +
+        '이어서 [제목 형식 확인]으로 영상 제목 형식을 눈으로 확인한 뒤 [영상 매칭]을 실행하세요.';
+    }
+    ui.alert('채널 동기화', message, ui.ButtonSet.OK);
   } catch (err) {
-    ui.alert('동기화 실패', String(err.message || err), ui.ButtonSet.OK);
+    ui.alert('동기화 실패', String(err && err.message ? err.message : err), ui.ButtonSet.OK);
   }
 }
 
-function upsertCache_(ss, rows) {
-  var sheet = ss.getSheetByName('yt_cache');
-  if (!sheet) throw new Error('yt_cache 시트가 없습니다. 먼저 "시트 초기 생성"을 실행하세요.');
+function clearResumeState_(props) {
+  props.deleteProperty('RESUME_INDEX');
+  props.deleteProperty('RESUME_TOKEN');
+  props.deleteProperty('RESUME_PLAYLIST_ID');
+}
 
-  var existing = {};
-  if (sheet.getLastRow() > 1) {
-    var current = sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getValues();
-    for (var i = 0; i < current.length; i++) existing[String(current[i][0])] = i + 2;
+/** 핸들 → 채널 ID. 한 번 찾으면 스크립트 속성에 캐시한다. */
+function resolveChannelId_(ss) {
+  var props = PropertiesService.getScriptProperties();
+  var cached = props.getProperty('CHANNEL_ID');
+  if (cached) return cached;
+
+  var handle = readConfigValue_(ss, '유튜브채널핸들') || DEFAULT_CHANNEL_HANDLE;
+  var id = null;
+
+  // forHandle 지원 여부가 환경에 따라 다르므로 실패를 감싼다.
+  try {
+    var byHandle = YouTube.Channels.list('id', { forHandle: handle });
+    if (byHandle.items && byHandle.items.length) id = byHandle.items[0].id;
+  } catch (e) {
+    // 아래 폴백으로 내려간다.
   }
 
-  var appended = [];
-  for (var r = 0; r < rows.length; r++) {
-    var videoId = String(rows[r][0]);
-    if (existing[videoId]) {
-      sheet.getRange(existing[videoId], 1, 1, 7).setValues([rows[r]]);
-    } else {
-      appended.push(rows[r]);
-      existing[videoId] = -1; // 같은 실행 안에서의 중복을 막는다.
+  if (!id) {
+    // 폴백: 검색 1회 (100 units). 결과를 캐시하므로 최초 1회만 든다.
+    // 핸들 문자열로 찾으므로 동명 채널을 잡을 수 있다 — 아래에서 확인을 요청한다.
+    var found = YouTube.Search.list('snippet', { q: handle, type: 'channel', maxResults: 1 });
+    if (found.items && found.items.length) {
+      id = found.items[0].snippet.channelId;
+      var ui = SpreadsheetApp.getUi();
+      var answer = ui.alert(
+        '채널 확인',
+        '핸들로 직접 찾지 못해 검색으로 골랐습니다.\n\n' +
+          '채널명: ' + found.items[0].snippet.title + '\n' +
+          'ID: ' + id + '\n\n이 채널이 맞습니까?',
+        ui.ButtonSet.YES_NO
+      );
+      if (answer !== ui.Button.YES) {
+        throw new Error('채널 선택을 취소했습니다. config의 유튜브채널핸들을 확인하세요.');
+      }
     }
   }
-  if (appended.length) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, appended.length, 7).setValues(appended);
+
+  if (!id) throw new Error('채널을 찾지 못했습니다. config의 유튜브채널핸들을 확인하세요.');
+
+  props.setProperty('CHANNEL_ID', id);
+  return id;
+}
+
+function fetchAllPlaylists_(channelId) {
+  var out = [];
+  var token = null;
+
+  do {
+    var res = YouTube.Playlists.list('snippet', {
+      channelId: channelId, maxResults: 50, pageToken: token
+    });
+    (res.items || []).forEach(function (p) {
+      out.push({ id: p.id, title: (p.snippet && p.snippet.title) || '' });
+    });
+    token = res.nextPageToken;
+  } while (token);
+
+  if (INCLUDE_UPLOADS) {
+    var channel = YouTube.Channels.list('contentDetails', { id: channelId });
+    var items = channel.items || [];
+    if (items.length && items[0].contentDetails) {
+      out.push({ id: items[0].contentDetails.relatedPlaylists.uploads, title: '(전체 업로드)' });
+    }
   }
-  return appended.length;
+
+  return out;
+}
+
+/** yt_cache는 사람이 편집하지 않는다 (§4.7). 없으면 만들고 숨긴다. */
+function getCacheSheet_(ss) {
+  var sheet = ss.getSheetByName('yt_cache');
+  if (!sheet) {
+    sheet = ss.insertSheet('yt_cache');
+    sheet.getRange(1, 1, 1, CACHE_HEADERS.length).setValues([CACHE_HEADERS]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+/** 이미 캐시에 있는 videoId|playlistId 조합. */
+function loadSeenKeys_(sheet) {
+  var seen = {};
+  var last = sheet.getLastRow();
+  if (last < 2) return seen;
+
+  var values = sheet.getRange(2, 1, last - 1, 4).getValues(); // videoId … playlistId
+  for (var i = 0; i < values.length; i++) {
+    if (values[i][0]) seen[values[i][0] + '|' + values[i][3]] = true;
+  }
+  return seen;
 }
 
 /**
- * [2단계] 매칭. yt_cache를 읽어 practice_links에 append 한다.
- *
- * 자동 수집한 데이터는 초안이지 사실이 아니다 (§원칙). 전부 검증=FALSE로 들어가고,
- * 기존 행은 절대 덮어쓰지 않는다 (§9.3 append only).
+ * 제목 형식 확인 (§11 미결정 항목).
+ * 매칭 규칙을 정하기 전에 실제 영상 제목이 어떤 모양인지 눈으로 보기 위한 것.
  */
+function sampleTitles() {
+  var ui = SpreadsheetApp.getUi();
+  var sheet = getCacheSheet_(getSpreadsheet_());
+  var last = sheet.getLastRow();
+  if (last < 2) {
+    ui.alert('yt_cache가 비어 있습니다. 먼저 [채널 동기화]를 실행하세요.');
+    return;
+  }
+
+  var values = sheet.getRange(2, 1, last - 1, 3).getValues(); // videoId, 제목, 재생목록명
+  var step = Math.max(1, Math.floor(values.length / 25));
+  var lines = [];
+  for (var i = 0; i < values.length && lines.length < 25; i += step) {
+    lines.push('[' + values[i][2] + ']  ' + values[i][1]);
+  }
+
+  Logger.log('yt_cache 총 ' + values.length + '행\n\n' + lines.join('\n'));
+  ui.alert(
+    '제목 형식 확인',
+    '총 ' + values.length + '행.\n\n' + lines.slice(0, 15).join('\n') +
+      '\n\n(전체 샘플은 [실행 로그]에서 확인)\n\n' +
+      '이 형식에 맞춰 parseVideoTitle_ 규칙을 고친 뒤 [영상 매칭]을 다시 실행하면 됩니다. ' +
+      '재매칭은 API 할당량을 쓰지 않습니다.',
+    ui.ButtonSet.OK
+  );
+}
+
+/** 캐시를 비운다. 매칭 규칙이 아니라 캐시 자체를 다시 받고 싶을 때만 쓴다. */
+function clearCache() {
+  var ui = SpreadsheetApp.getUi();
+  if (ui.alert('yt_cache를 전부 비울까요?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  var sheet = getCacheSheet_(getSpreadsheet_());
+  if (sheet.getLastRow() > 1) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, CACHE_HEADERS.length).clearContent();
+  }
+  clearResumeState_(PropertiesService.getScriptProperties());
+  ui.alert('비웠습니다.');
+}
+
 function matchVideos() {
   var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
   var tz = ss.getSpreadsheetTimeZone();
 
   var cache = readSheet_(ss, 'yt_cache', tz);
@@ -315,7 +459,7 @@ function registerBookPrompt() {
     return;
   }
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
   var bookCode = '중' + volume;
   ensureBookRow_(ss, bookCode, volume);
 
