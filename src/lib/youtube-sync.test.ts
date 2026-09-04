@@ -110,7 +110,7 @@ function fakeSheet(headers: string[], rules: Record<string, string[]>) {
   return {
     getName: () => 'practice_links',
     getLastColumn: () => headers.length,
-    getRange(row: number, col: number, numRows?: number, numCols?: number) {
+    getRange(row: number, col: number, numRows?: number) {
       if (row === 1 && numRows === 1) return { getValues: () => [headers] }
       const header = headers[col - 1]
       return {
