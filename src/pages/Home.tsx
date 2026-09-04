@@ -36,11 +36,11 @@ export default function Home() {
   const warnings = noticeWarnings(view.songs)
   const upcoming = featured.찬양일 >= today
 
-  // 다음 찬양일 3개 — 지나간 것만 있으면 최근 3개.
-  const others = [...data.services]
-    .filter((s) => s.찬양일 !== featured.찬양일)
-    .sort((a, b) => a.찬양일.localeCompare(b.찬양일))
+  // 다가오는 찬양이면 이후 3개를 가까운 순으로, 지나간 것뿐이면 직전 3개를 최근 순으로.
+  // (양쪽 다 오름차순으로 자르면 지난 찬양에서 가장 오래된 것이 올라온다.)
+  const others = data.services
     .filter((s) => (upcoming ? s.찬양일 > featured.찬양일 : s.찬양일 < featured.찬양일))
+    .sort((a, b) => (upcoming ? a.찬양일.localeCompare(b.찬양일) : b.찬양일.localeCompare(a.찬양일)))
     .slice(0, 3)
 
   return (
@@ -119,6 +119,7 @@ export default function Home() {
           <ul className="card divide-y divide-stone-100">
             {others.map((s) => {
               const total = totalAttendance(s)
+              const rehearsalCount = (rehearsals.get(s.찬양일) ?? []).length
               return (
                 <li key={s.찬양일} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                   <div className="min-w-0">
@@ -128,7 +129,11 @@ export default function Home() {
                     </p>
                   </div>
                   <span className="shrink-0 text-xs text-stone-400">
-                    {total != null ? `총 ${total}명` : `${(rehearsals.get(s.찬양일) ?? []).length}회 연습`}
+                    {total != null
+                      ? `총 ${total}명`
+                      : rehearsalCount > 0
+                        ? `${rehearsalCount}회 연습`
+                        : ''}
                   </span>
                 </li>
               )

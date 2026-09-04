@@ -5,10 +5,11 @@ import { groupServicesByMonth, totalAttendance } from '../lib/derive'
 import { formatMonth, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
 import { normalizeLink } from '../lib/youtube'
 import { Empty, RecordingLink, Spinner } from '../components/ui'
+import { PartLinkChips } from '../components/PartLinks'
 
 /** 월별 아카이브 (§6.2). 연도 경계는 저장이 평면이라 자연히 넘어간다 (§3). */
 export default function Archive() {
-  const { data, loading, songs } = useArchive()
+  const { data, loading, songs, links } = useArchive()
   const groups = useMemo(() => groupServicesByMonth(data.services), [data.services])
   const [open, setOpen] = useState<Set<string>>(() => new Set([monthKey(todayKey())]))
   const [year, setYear] = useState<string>('')
@@ -107,6 +108,10 @@ export default function Archive() {
                                     표시명
                                   )}
                                   {song?.곡코드 && <span className="ml-1 text-xs text-stone-400">{song.곡코드}</span>}
+                                  <PartLinkChips
+                                    links={links.get(표시명) ?? []}
+                                    order={data.config.공지_파트순서}
+                                  />
                                 </li>
                               )
                             })
@@ -118,8 +123,16 @@ export default function Archive() {
                         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500">
                           {service.세션 && <span>세션 {service.세션}</span>}
                           {record && (
-                            <a href={record.shareUrl} target="_blank" rel="noreferrer noopener" className="underline">
-                              기록영상
+                            <a
+                              href={record.shareUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="chip bg-rose-600 text-white hover:brightness-110"
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden className="h-2.5 w-2.5 fill-current opacity-80">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                              실황영상
                             </a>
                           )}
 

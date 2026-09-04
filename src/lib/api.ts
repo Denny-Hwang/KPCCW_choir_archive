@@ -11,7 +11,18 @@ import type { ArchiveData, RawPayload } from './types'
 const CACHE_KEY = 'kpccw.archive.cache.v1'
 const ENDPOINT_KEY = 'kpccw.archive.endpoint'
 
-export type DataOrigin = 'network' | 'cache' | 'demo'
+/**
+ * 배포된 Apps Script 읽기 엔드포인트.
+ *
+ * 저장소에 둬도 되는 값이다 (§13.3): 앱을 여는 사람의 브라우저에 어차피 노출되고,
+ * services는 참석을 파트별 숫자로만 기록해 개인정보가 없다.
+ * 여기 박아 두어야 대원들이 카톡 링크로 열자마자 데이터가 보인다 — 각자 설정할 수 없다.
+ */
+const DEFAULT_ENDPOINT =
+  'https://script.google.com/macros/s/AKfycbw0mnamF0M6fOE5qryCMneZx48yivldMwz3APG4FquLK3R4zOKlZcG7D0ZPO1eW1v4/exec'
+
+/** 'error' = 엔드포인트는 있는데 못 받았고 보여줄 캐시도 없는 상태. */
+export type DataOrigin = 'network' | 'cache' | 'demo' | 'error'
 
 export interface LoadResult {
   data: ArchiveData
@@ -21,14 +32,14 @@ export interface LoadResult {
 }
 
 /**
- * 엔드포인트 우선순위: 사용자가 설정 화면에서 넣은 값 > 빌드 시 주입값.
- * Apps Script URL은 저장소에 있어도 되지만(§13.3), 배포 전이거나 URL이 바뀌었을 때
- * 재빌드 없이 고칠 수 있어야 한다.
+ * 엔드포인트 우선순위: 이 브라우저에 저장된 값 > 빌드 시 주입값 > 코드의 기본값.
+ * 앞의 둘은 URL이 바뀌었을 때 재빌드 없이(또는 재배포만으로) 갈아끼우기 위한 통로다.
  */
 export function getEndpoint(): string {
   const stored = safeGet(ENDPOINT_KEY)
   if (stored) return stored
-  return (import.meta.env.VITE_API_URL as string | undefined)?.trim() ?? ''
+  const injected = (import.meta.env.VITE_API_URL as string | undefined)?.trim()
+  return injected || DEFAULT_ENDPOINT
 }
 
 export function setEndpoint(url: string): void {
@@ -82,16 +93,12 @@ export async function loadArchive(): Promise<LoadResult> {
   const endpoint = getEndpoint()
   const cached = readCache()
 
+  // 엔드포인트가 아예 없을 때만 예시 데이터를 쓴다.
   if (!endpoint) {
     try {
       return { data: parsePayload(await loadDemo()), origin: 'demo', fetchedAt: null, error: null }
     } catch (e) {
-      return {
-        data: parsePayload(cached?.payload ?? null),
-        origin: cached ? 'cache' : 'demo',
-        fetchedAt: cached?.fetchedAt ?? null,
-        error: message(e),
-      }
+      return { data: parsePayload(null), origin: 'error', fetchedAt: null, error: message(e) }
     }
   }
 
@@ -99,15 +106,13 @@ export async function loadArchive(): Promise<LoadResult> {
     const payload = await fetchPayload(endpoint)
     return { data: parsePayload(payload), origin: 'network', fetchedAt: writeCache(payload), error: null }
   } catch (e) {
+    // 마지막으로 받은 내용이 있으면 그것을 보여준다 (stale-while-revalidate).
     if (cached) {
-      return {
-        data: parsePayload(cached.payload),
-        origin: 'cache',
-        fetchedAt: cached.fetchedAt,
-        error: message(e),
-      }
+      return { data: parsePayload(cached.payload), origin: 'cache', fetchedAt: cached.fetchedAt, error: message(e) }
     }
-    throw e instanceof Error ? e : new Error(message(e))
+    // 캐시도 없으면 빈 화면이 된다. 이때 예시 데이터를 대신 보여주면 안 된다 —
+    // 남의 교회 곡이 진짜 기록처럼 보이는 것이 연결 실패보다 나쁘다.
+    return { data: parsePayload(null), origin: 'error', fetchedAt: null, error: message(e) }
   }
 }
 

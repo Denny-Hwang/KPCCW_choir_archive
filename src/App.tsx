@@ -11,6 +11,9 @@ import Settings from './pages/Settings'
 /**
  * GitHub Pages에는 서버 리라이트가 없다. HashRouter를 쓰면 새로고침·딥링크가
  * 404가 나지 않고, 카톡 인앱 브라우저에서도 안정적이다 (§13.2).
+ *
+ * 설정 화면은 탭에 넣지 않는다. 대원들이 볼 화면이 아니다.
+ * 총무·지휘자는 주소로 직접 연다: .../#/settings (데이터 점검용).
  */
 const TABS = [
   { to: '/', label: '홈', end: true },
@@ -35,9 +38,6 @@ function Chrome() {
             <button type="button" onClick={reload} className="text-xs text-stone-400 hover:text-stone-600">
               {loading ? '새로고침 중…' : '새로고침'}
             </button>
-            <NavLink to="/settings" className="text-xs text-stone-400 hover:text-stone-600">
-              설정
-            </NavLink>
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-2">
@@ -58,7 +58,7 @@ function Chrome() {
         </nav>
       </header>
 
-      <StatusBar origin={origin} error={error} />
+      <StatusBar origin={origin} error={error} loading={loading} onRetry={reload} />
 
       <main className="flex-1 space-y-5 px-4 py-4">
         <Routes>
@@ -96,20 +96,47 @@ function Chrome() {
   )
 }
 
-function StatusBar({ origin, error }: { origin: string; error: string | null }) {
-  if (origin === 'demo') {
+function StatusBar({
+  origin,
+  error,
+  loading,
+  onRetry,
+}: {
+  origin: string
+  error: string | null
+  loading: boolean
+  onRetry: () => void
+}) {
+  if (origin === 'error') {
     return (
-      <p className="mx-4 mt-2 rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
-        예시 데이터를 보고 있습니다. <NavLink to="/settings" className="underline">설정</NavLink>에서 시트 주소를
-        연결하세요.
-      </p>
+      <div className="mx-4 mt-2 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-800">
+        <p className="font-semibold">시트에서 자료를 받지 못했습니다.</p>
+        <p className="opacity-80">
+          잠시 후 다시 시도해 주세요. 교회 와이파이가 불안정할 때 종종 생깁니다.
+        </p>
+        {error && <p className="mt-1 break-all opacity-60">{error}</p>}
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={loading}
+          className="mt-2 rounded-lg bg-rose-600 px-2.5 py-1 font-semibold text-white disabled:opacity-50"
+        >
+          {loading ? '다시 시도 중…' : '다시 시도'}
+        </button>
+      </div>
     )
   }
   if (origin === 'cache') {
     return (
       <p className="mx-4 mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
         네트워크에 연결하지 못해 마지막으로 받은 내용을 보여줍니다.
-        {error && <span className="block opacity-70">{error}</span>}
+      </p>
+    )
+  }
+  if (origin === 'demo') {
+    return (
+      <p className="mx-4 mt-2 rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
+        예시 데이터를 보고 있습니다.
       </p>
     )
   }

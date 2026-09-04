@@ -40,21 +40,61 @@ export function PartLinks({ links, order = PART_ORDER }: { links: PracticeLink[]
               PART_COLOR[part] ?? 'bg-stone-600 text-white'
             } ${link.검증 ? '' : 'opacity-60'}`}
           >
-            {normalized.thumbnailUrl && (
-              <img
-                src={normalized.thumbnailUrl}
-                alt=""
-                loading="lazy"
-                aria-hidden
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25"
-              />
-            )}
-            <span className="relative text-base font-bold">{part}</span>
+            {/*
+              썸네일을 배경으로 깔지 않는다. 성가 영상 썸네일에는 곡명이 큰 글씨로 박혀 있어서,
+              흐리게 깔아도 파트 라벨과 겹쳐 둘 다 안 읽힌다. 게다가 한 곡의 파트 6개가
+              전부 같은 썸네일이라 구분에 아무 도움이 안 된다.
+              §6.1의 요구는 "파트 라벨을 크게"이므로 색과 라벨만 남긴다.
+            */}
+            <span className="relative flex items-center gap-1.5 text-base font-bold">
+              <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 shrink-0 fill-current opacity-80">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              {part}
+            </span>
             <span className="relative flex flex-wrap items-center gap-1 text-[11px] opacity-90">
               {!link.검증 && <span className="rounded bg-white/25 px-1">미확인</span>}
               {normalized.unrecognized && <span className="rounded bg-white/25 px-1">주소 확인 필요</span>}
               {list.length > 1 && <span className="rounded bg-white/25 px-1">+{list.length - 1}</span>}
             </span>
+          </a>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * 목록 안에서 쓰는 작은 파트 링크 (§6.2 아카이브).
+ * 카드형 버튼은 목록에서 자리를 너무 먹는다. 색은 홈 화면과 같게 유지해
+ * 같은 파트가 어디서나 같은 색으로 보이게 한다.
+ */
+export function PartLinkChips({ links, order = PART_ORDER }: { links: PracticeLink[]; order?: Part[] }) {
+  const shown = order
+    .map((part) => ({ part, link: links.find((l) => l.파트 === part) }))
+    .filter((e): e is { part: Part; link: PracticeLink } => !!e.link)
+
+  if (!shown.length) return null
+
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {shown.map(({ part, link }) => {
+        const normalized = normalizeLink(link.URL, link.시작초)
+        return (
+          <a
+            key={part}
+            href={normalized.shareUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={`${link.표시명} — ${part}`}
+            className={`chip ${PART_COLOR[part] ?? 'bg-stone-600 text-white'} ${
+              link.검증 ? '' : 'opacity-50'
+            } hover:brightness-110`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden className="h-2.5 w-2.5 fill-current opacity-80">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            {part}
           </a>
         )
       })}

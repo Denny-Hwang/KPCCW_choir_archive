@@ -60,13 +60,14 @@ function setupSheets() {
   }
 
   ss.getSheetByName('yt_cache').hideSheet();
-  seedConfig_(ss);
+  var configResult = seedConfig_(ss);
   installSongFormulas_(ss);
   installValidations_(ss);
 
   SpreadsheetApp.getUi().alert(
     '시트 준비 완료',
-    '헤더·드롭다운·자동 수식을 넣었습니다.\n\n' +
+    '헤더·드롭다운·자동 수식을 넣었습니다.\n' +
+      'config: ' + configResult.added + '개 추가, ' + configResult.replaced + '개 갱신.\n\n' +
       '다음 순서를 권합니다 (§9.5):\n' +
       '1. books에 보유 악보집을 먼저 넣으세요 — 이것만으로 앱이 동작합니다.\n' +
       '2. services에 최근 1~2년 찬양 기록을 넣으세요 — 중복 경고가 여기서 나옵니다.\n' +
@@ -86,17 +87,43 @@ function protectHeader_(sheet) {
   protection.setWarningOnly(true);
 }
 
+/**
+ * 예전 버전이 넣어 둔 자리표시자. 사람이 고른 값이 아니므로 기본값으로 덮어써도 된다.
+ * 여기에 없는 값은 총무가 정한 것으로 보고 절대 건드리지 않는다.
+ */
+var CONFIG_PLACEHOLDERS = {
+  '앱_제목': ['○○교회 성가대', '성가대 아카이브']
+};
+
 function seedConfig_(ss) {
   var sheet = ss.getSheetByName('config');
+  var defaults = {};
+  for (var d = 0; d < CONFIG_DEFAULTS.length; d++) defaults[CONFIG_DEFAULTS[d][0]] = CONFIG_DEFAULTS[d][1];
+
   var existing = {};
+  var replaced = 0;
+
   if (sheet.getLastRow() > 1) {
     var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
-    for (var i = 0; i < rows.length; i++) existing[String(rows[i][0]).trim()] = true;
+    for (var i = 0; i < rows.length; i++) {
+      var key = String(rows[i][0]).trim();
+      if (!key) continue;
+      existing[key] = true;
+
+      // 자리표시자가 그대로 남아 있으면 기본값으로 올린다.
+      var stale = CONFIG_PLACEHOLDERS[key];
+      if (stale && stale.indexOf(String(rows[i][1]).trim()) !== -1 && defaults[key]) {
+        sheet.getRange(i + 2, 2).setValue(defaults[key]);
+        replaced++;
+      }
+    }
   }
+
   var toAdd = CONFIG_DEFAULTS.filter(function (pair) { return !existing[pair[0]]; });
   if (toAdd.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, toAdd.length, 2).setValues(toAdd);
   }
+  return { added: toAdd.length, replaced: replaced };
 }
 
 /**
