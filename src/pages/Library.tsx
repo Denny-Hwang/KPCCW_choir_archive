@@ -85,7 +85,7 @@ export default function Library() {
       ) : (
         <Empty
           title="조건에 맞는 곡이 없습니다."
-          hint={data.songs.length ? '필터를 넓혀 보세요.' : 'songs 시트가 비어 있습니다. 선곡할 때마다 한 곡씩 채워도 됩니다.'}
+          hint={data.songs.length ? '필터를 넓혀 보세요.' : undefined}
         />
       )}
     </div>

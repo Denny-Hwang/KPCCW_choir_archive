@@ -19,7 +19,7 @@ export default function Shelf() {
   const candidates = useMemo(() => buildCandidates(data, todayKey(), links), [data, links])
 
   if (loading && !books.length) return <Spinner />
-  if (!books.length) return <Empty title="등록된 악보집이 없습니다." hint="books 시트에 보유한 악보집을 넣어 주세요." />
+  if (!books.length) return <Empty title="등록된 악보집이 없습니다." />
 
   const selected = bookCode ? books.find((b) => b.집코드 === decodeURIComponent(bookCode)) : undefined
 
@@ -64,7 +64,6 @@ export default function Shelf() {
         ) : (
           <Empty
             title="이 악보집의 수록곡이 아직 없습니다."
-            hint="채널 미러링·목차 붙여넣기로 채우거나, 선곡할 때마다 한 곡씩 추가해도 됩니다."
           />
         )}
       </div>

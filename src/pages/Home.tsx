@@ -11,7 +11,7 @@ import { CopyBlock, Empty, RecordingButton, Section, Spinner } from '../componen
  * 대원 입장에서 필요한 건 사실상 이 화면뿐이다. 곡, 연습 일정, 파트 버튼, 공지 복사.
  */
 export default function Home() {
-  const { data, loading, songs, links, rehearsals } = useArchive()
+  const { data, loading, songs, rehearsals } = useArchive()
   const today = todayKey()
 
   if (loading && !data.services.length) return <Spinner />
@@ -21,7 +21,6 @@ export default function Home() {
     return (
       <Empty
         title="아직 등록된 찬양일이 없습니다."
-        hint="구글 시트의 services 시트에 찬양일을 한 줄 넣으면 여기에 나타납니다."
       />
     )
   }
@@ -138,11 +137,6 @@ export default function Home() {
         </Section>
       )}
 
-      {!links.size && (
-        <p className="text-center text-xs text-stone-400">
-          practice_links 시트에 파트 영상을 넣으면 파트 버튼과 공지 링크가 채워집니다.
-        </p>
-      )}
     </div>
   )
 }

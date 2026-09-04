@@ -15,7 +15,7 @@ export default function Archive() {
   const [year, setYear] = useState<string>('')
 
   if (loading && !data.services.length) return <Spinner />
-  if (!groups.length) return <Empty title="아직 기록된 찬양이 없습니다." hint="services 시트에 행을 추가해 주세요." />
+  if (!groups.length) return <Empty title="아직 기록된 찬양이 없습니다." />
 
   const years = [...new Set(groups.map((g) => g.month.slice(0, 4)))].sort((a, b) => b.localeCompare(a))
   const visible = year ? groups.filter((g) => g.month.startsWith(year)) : groups
@@ -32,10 +32,7 @@ export default function Archive() {
   return (
     <div className="space-y-4">
       {data.config.예배영상URL && (
-        <div className="card space-y-2 p-3">
-          <p className="text-xs text-stone-600">예배 실황 영상은 교회 홈페이지에 올라옵니다.</p>
-          <RecordingButton fallbackUrl={data.config.예배영상URL} />
-        </div>
+        <RecordingButton fallbackUrl={data.config.예배영상URL} />
       )}
 
       <div className="flex flex-wrap gap-1">
