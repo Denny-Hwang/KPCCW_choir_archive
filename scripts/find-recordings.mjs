@@ -60,25 +60,42 @@ async function fetchText(url) {
   }
 }
 
-const stripTags = (s) => s.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+/**
+ * 스크립트·스타일 본문을 먼저 없앤다. 이걸 안 하면 페이지 상단의 자바스크립트
+ * 문자열("0", "sub" …)이 따옴표 후보로 잡혀 제목을 못 찾는다.
+ */
+export function clean(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 /**
  * 상세 페이지에서 제목·공연·날짜를 뽑는다.
- * 화면은 이렇게 생겼다:  "참 아름다워라"   /   KPCCW 성가대 | 2026.05.24
+ * 화면은 `"참 아름다워라" / KPCCW 성가대 | 2026.05.24` 로 보이지만,
+ * 가운데 세로줄은 CSS로 그린 선이라 텍스트에는 남지 않는다. 그래서 날짜를 기준점으로 삼는다.
  */
 export function parseDetail(html) {
-  const text = stripTags(html)
+  const text = clean(html)
+  const m = text.match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
+  if (!m) return null
 
-  const meta = text.match(/([가-힣A-Za-z0-9 ()&·.-]{2,40}?)\s*\|\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
-  if (!meta) return null
+  const 날짜 = `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`
+  const before = text.slice(0, m.index)
 
-  const 날짜 = `${meta[2]}-${String(meta[3]).padStart(2, '0')}-${String(meta[4]).padStart(2, '0')}`
-  const 공연 = meta[1].trim()
+  const quoted = [...before.matchAll(/["“”]([^"“”]{2,60})["“”]/g)]
+  const last = quoted[quoted.length - 1]
+  const 제목 = last ? last[1].trim() : ''
 
-  // 제목은 따옴표로 감싸여 있다. 공연·날짜 바로 앞의 것을 고른다.
-  const before = text.slice(0, meta.index)
-  const quoted = [...before.matchAll(/["“”']([^"“”']{2,60})["“”']/g)]
-  const 제목 = quoted.length ? quoted[quoted.length - 1][1].trim() : ''
+  const between = last ? before.slice(last.index + last[0].length) : before.slice(-60)
+  const 공연 = between.replace(/[|]/g, ' ').replace(/\s+/g, ' ').trim()
 
   return { 제목, 공연, 날짜 }
 }

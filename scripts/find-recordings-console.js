@@ -46,23 +46,39 @@
       stat.ok++
       const headerCharset = (((res.headers.get('content-type') || '').match(/charset=([\w-]+)/i)) || [])[1]
       const html = decode(await res.arrayBuffer(), headerCharset)
-      const text = html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+      const text = html
+        // 스크립트·스타일 본문을 먼저 없앤다. 이걸 안 하면 페이지 상단의 자바스크립트
+        // 문자열("0", "sub" …)이 따옴표 후보로 잡혀 제목을 못 찾는다.
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/\s+/g, ' ')
+        .trim()
 
-      // "공연명 | YYYY.MM.DD" 를 찾는다
-      const meta = text.match(/([가-힣A-Za-z0-9 ()&·.-]{2,40}?)\s*\|\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
+      // 화면의 "공연 | 날짜"에서 |는 CSS로 그린 선이라 텍스트에는 없다. 날짜만 찾는다.
+      const meta = text.match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
       if (!meta) {
         stat.noMeta++
-        if (!sample && text.length > 40) sample = { num, text: text.slice(0, 500) }
+        if (!sample && text.length > 40) sample = { num, text: text.slice(0, 900) }
         continue
       }
 
-      const 공연 = meta[1].trim()
-      if (PERFORMER && !공연.includes(PERFORMER)) { stat.otherPerformer++; continue }
-
-      const 날짜 = `${meta[2]}-${String(meta[3]).padStart(2, '0')}-${String(meta[4]).padStart(2, '0')}`
+      const 날짜 = `${meta[1]}-${String(meta[2]).padStart(2, '0')}-${String(meta[3]).padStart(2, '0')}`
       const before = text.slice(0, meta.index)
-      const quoted = [...before.matchAll(/["“”']([^"“”']{2,60})["“”']/g)]
-      const 제목 = quoted.length ? quoted[quoted.length - 1][1].trim() : ''
+
+      // 제목은 따옴표로 감싸여 있다. 날짜 앞의 마지막 것.
+      const quoted = [...before.matchAll(/["“”]([^"“”]{2,60})["“”]/g)]
+      const last = quoted[quoted.length - 1]
+      const 제목 = last ? last[1].trim() : ''
+
+      // 공연명은 제목과 날짜 사이에 남는다.
+      const between = last ? before.slice(last.index + last[0].length) : before.slice(-60)
+      const 공연 = between.replace(/[|]/g, ' ').replace(/\s+/g, ' ').trim()
+      if (PERFORMER && !공연.includes(PERFORMER)) { stat.otherPerformer++; continue }
 
       found.push({ num, 날짜, 제목, 공연, url: location.origin + path })
       console.log('✔', num, 날짜, 제목)
@@ -85,7 +101,7 @@
   if (!found.length) {
     console.warn('한 건도 찾지 못했습니다. 아래를 알려주시면 파싱 규칙을 고치겠습니다.')
     if (sample) {
-      console.log(`\n--- 내용은 있는데 형식을 못 읽은 페이지 (num=${sample.num}) 앞 500자 ---`)
+      console.log(`\n--- 내용은 있는데 형식을 못 읽은 페이지 (num=${sample.num}) 앞 900자 ---`)
       console.log(sample.text)
     } else if (stat.ok === 0) {
       console.log('요청 자체가 실패했습니다. 위 오류 수치를 알려주세요.')

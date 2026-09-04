@@ -5,19 +5,22 @@ import { parseDetail } from '../../scripts/find-recordings.mjs'
 /**
  * 교회 게시판 상세 페이지에서 제목·공연·날짜를 뽑는 부분.
  *
- * 실제 사이트에 붙어 볼 수 없는 환경이라, 화면에서 확인한 구조
- * (제목이 따옴표로 감싸이고 그 아래 "공연 | YYYY.MM.DD")를 본뜬 fixture로 잠가 둔다.
+ * fixture는 실제 페이지를 진단해 확인한 구조를 그대로 옮긴 것이다.
+ * 특히 상단의 인라인 스크립트가 중요하다 — 이걸 먼저 걷어내지 않으면
+ * 자바스크립트 문자열("0", "sub" …)이 따옴표 후보로 잡혀 제목 추출이 실패한다.
+ * 처음 판이 한 건도 못 찾은 원인이 이것이었다.
  */
 const page = (title: string, performer: string, date: string) => `
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=euc-kr"></head>
-<body>
-  <div id="header"><a href="/">중부워싱턴한인장로교회</a></div>
-  <table class="board_view">
-    <tr><td class="subject"><strong>"${title}"</strong></td></tr>
-    <tr><td class="info">${performer}&nbsp;|&nbsp;${date}</td></tr>
-    <tr><td class="content"><iframe src="https://www.youtube.com/embed/abc"></iframe></td></tr>
-  </table>
-  <div class="share">공유 주소복사</div>
+<html><head><meta charset="utf-8"></head><body>
+  <div class="path">중부워싱턴한인장로교회 / Internet TV / 성가대 &amp; 특송(Special Music)</div>
+  <script>
+    sitemapPosition = ""; var awdDisplay = new awdDisplay("0", "sub", 1200);
+    awdDisplay.enMobile = "1"; var menu = new menu(); menu.pageCode = "18";
+    var boardID= ""; if(!boardID) { if(isApp("android")) { window.webViewCall.receiveAuth(true); } }
+  </script>
+  <div class="view_tit">"${title}"</div>
+  <div class="view_info"><span>${performer}</span><span class="bar">${date}</span></div>
+  <div class="view_con"><iframe src="https://www.youtube.com/embed/xxx"></iframe></div>
 </body></html>`
 
 describe('parseDetail', () => {
@@ -48,6 +51,13 @@ describe('parseDetail', () => {
   it('제목에 곡번호나 괄호가 붙어도 따옴표 안을 그대로 쓴다', () => {
     expect(parseDetail(page('주여 우릴 회복시켜 주소서 (중43)', 'KPCCW 성가대', '2025.02.23'))?.제목)
       .toBe('주여 우릴 회복시켜 주소서 (중43)')
+  })
+
+  it('상단 인라인 스크립트의 문자열을 제목으로 잘못 잡지 않는다', () => {
+    const r = parseDetail(page('참 아름다워라', 'KPCCW 성가대', '2026.05.24'))
+    expect(r?.제목).toBe('참 아름다워라')
+    expect(r?.제목).not.toBe('sub')
+    expect(r?.공연).not.toContain('awdDisplay')
   })
 
   it('없는 글이나 형식이 다른 페이지는 null', () => {
