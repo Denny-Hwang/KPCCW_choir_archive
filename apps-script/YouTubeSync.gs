@@ -672,6 +672,75 @@ function matchVideos() {
   );
 }
 
+/**
+ * 드롭다운(데이터 확인)이 걸린 열의 허용값. 걸려 있지 않으면 null.
+ *
+ * 열 이름으로 찾고, 판정 기준이 범위든 목록이든 같은 모양으로 돌려준다.
+ */
+function allowedValues_(sheet, headerName) {
+  var col = columnIndex_(sheet, headerName);
+  if (!col) return null;
+
+  var rule = sheet.getRange(2, col).getDataValidation();
+  if (!rule) return null;
+
+  var type = rule.getCriteriaType();
+  var args = rule.getCriteriaValues();
+  var list;
+  if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE) {
+    list = args[0].getValues().map(function (r) { return r[0]; });
+  } else if (type === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) {
+    list = args[0];
+  } else {
+    return null; // 우리가 쓰는 두 종류가 아니면 검사하지 않는다.
+  }
+
+  var set = {};
+  for (var i = 0; i < list.length; i++) {
+    var v = String(list[i] === null || list[i] === undefined ? '' : list[i]).trim();
+    if (v) set[v] = true;
+  }
+  return set;
+}
+
+/**
+ * 붙이기 전에 드롭다운 제약을 먼저 확인한다.
+ *
+ * 드롭다운이 걸린 열에 허용되지 않은 값을 setValues로 쓰면, 한 칸 때문에
+ * **묶음 전체**가 예외로 죽는다. 그런데 시트가 던지는 것은 그 열의 도움말 문구
+ * 하나뿐이라("songs 시트의 표시명 중에서 고르세요..."), 어느 열의 어느 값이
+ * 걸렸는지 알 수가 없다. 그래서 쓰기 전에 걸러 내고, 걸린 값을 이름과 함께 돌려준다.
+ *
+ * 빈 칸은 시트도 허용하므로 검사하지 않는다.
+ */
+function splitByValidation_(sheet, headers, rows) {
+  var checks = [];
+  for (var h = 0; h < headers.length; h++) {
+    var name = String(headers[h]).trim();
+    if (!name) continue;
+    var allowed = allowedValues_(sheet, name);
+    if (allowed) checks.push({ name: name, index: h, allowed: allowed });
+  }
+  if (!checks.length) return { ok: rows, bad: [] };
+
+  var ok = [];
+  var bad = [];
+  for (var r = 0; r < rows.length; r++) {
+    var reason = null;
+    for (var c = 0; c < checks.length; c++) {
+      var value = rows[r][checks[c].index];
+      if (value === '' || value === null || value === undefined) continue;
+      if (!checks[c].allowed[String(value).trim()]) {
+        reason = checks[c].name + ' = "' + value + '" — 드롭다운 목록에 없는 값';
+        break;
+      }
+    }
+    if (reason) bad.push({ row: rows[r], reason: reason });
+    else ok.push(rows[r]);
+  }
+  return { ok: ok, bad: bad };
+}
+
 /** practice_links 행을 열 이름으로 만든다. 열 순서에 기대지 않는다 (§4.5). */
 function buildLinkRow_(headers, candidate) {
   return headers.map(function (header) {

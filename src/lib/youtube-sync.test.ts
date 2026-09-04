@@ -177,3 +177,35 @@ describe('buildLinkRow_', () => {
     expect(row[4]).toBe('youtube_channel')
   })
 })
+
+/**
+ * 배포가 파일 복사·붙여넣기라서, 한 파일에만 있는 헬퍼를 다른 파일이 부르면
+ * 그 파일 하나만 갱신했을 때 `ReferenceError: …_ is not defined`로 터진다.
+ * 실제로 splitByValidation_을 Code.gs에 두고 YouTubeSync.gs에서 불러 그렇게 터졌다.
+ * 이름 뒤 밑줄이 내부 헬퍼 규약이므로, 그 호출이 전부 어딘가에 정의돼 있는지만 본다.
+ */
+describe('.gs 내부 헬퍼', () => {
+  const files = ['Code.gs', 'Setup.gs', 'YouTubeSync.gs']
+  const sources = files.map((f) => ({
+    file: f,
+    src: readFileSync(new URL('../../apps-script/' + f, import.meta.url), 'utf8')
+  }))
+
+  const defined = new Set<string>()
+  for (const { src } of sources) {
+    for (const m of src.matchAll(/function\s+([A-Za-z0-9_]+_)\s*\(/g)) defined.add(m[1])
+  }
+
+  it('호출하는 헬퍼가 모두 정의돼 있다', () => {
+    const missing: string[] = []
+    for (const { file, src } of sources) {
+      // 주석만 걷어낸다. 문자열까지 지우려 하면 정규식 리터럴 안의 따옴표에
+      // 짝이 어긋나 코드가 통째로 사라지고, 검사가 조용히 무력해진다.
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+      for (const m of code.matchAll(/(?:^|[^.\w])([A-Za-z][A-Za-z0-9_]*_)\s*\(/g)) {
+        if (!defined.has(m[1])) missing.push(file + ' → ' + m[1] + '()')
+      }
+    }
+    expect([...new Set(missing)]).toEqual([])
+  })
+})
