@@ -20,7 +20,9 @@ export function extractVideoId(input: string): string | null {
     return null
   }
 
-  const host = url.hostname.replace(/^www\./, '').replace(/^m\./, '')
+  // music.youtube.com 링크가 실제 공지에 쓰인다. 이 접두사를 벗기지 않으면
+  // 정상 링크인데도 ID 추출에 실패해 공지에서 원본 URL이 그대로 나간다.
+  const host = url.hostname.replace(/^(?:www|m|music)\./, '')
   const segments = url.pathname.split('/').filter(Boolean)
 
   if (host === 'youtu.be') {

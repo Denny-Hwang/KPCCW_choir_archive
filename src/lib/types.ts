@@ -92,7 +92,7 @@ export interface AppConfig {
   공지_제목형식: string
   공지_연습헤더: string
   공지_곡목표시: boolean
-  /** 구역 사이에 빈 줄을 넣을지. 기본 FALSE = 기존 메모 포맷 그대로. */
+  /** 구역·파트 블록 사이에 빈 줄을 넣을지. 기본 TRUE = 실제 카톡 공지 그대로. */
   공지_빈줄구분: boolean
   공지_파트순서: Part[]
   앱_제목: string

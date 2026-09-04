@@ -141,47 +141,69 @@ function clearResumeState_(props) {
   props.deleteProperty('RESUME_PLAYLIST_ID');
 }
 
-/** 핸들 → 채널 ID. 한 번 찾으면 스크립트 속성에 캐시한다. */
+/**
+ * 핸들 → 채널 ID. 한 번 찾으면 스크립트 속성에 캐시한다.
+ *
+ * search.list는 쓰지 않는다. 호출당 100 units인 것도 있지만, 더 큰 이유는
+ * 그 호출 하나가 youtube.readonly보다 넓은 승인 범위를 요구하기 때문이다
+ * (youtube / youtube.force-ssl / youtubepartner 중 하나). 채널 ID 하나 찾자고
+ * 채널 편집 권한까지 요구하는 것은 맞지 않는다. 못 찾으면 사람에게 물어본다.
+ */
 function resolveChannelId_(ss) {
   var props = PropertiesService.getScriptProperties();
   var cached = props.getProperty('CHANNEL_ID');
   if (cached) return cached;
 
-  var handle = readConfigValue_(ss, '유튜브채널핸들') || DEFAULT_CHANNEL_HANDLE;
-  var id = null;
+  // config에 채널 ID를 직접 넣어 두면 API를 아예 부르지 않는다.
+  var configured = extractChannelId_(readConfigValue_(ss, '유튜브채널ID'));
+  if (configured) {
+    props.setProperty('CHANNEL_ID', configured);
+    return configured;
+  }
 
-  // forHandle 지원 여부가 환경에 따라 다르므로 실패를 감싼다.
+  var handle = readConfigValue_(ss, '유튜브채널핸들') || DEFAULT_CHANNEL_HANDLE;
+  var reason = '';
+
   try {
     var byHandle = YouTube.Channels.list('id', { forHandle: handle });
-    if (byHandle.items && byHandle.items.length) id = byHandle.items[0].id;
-  } catch (e) {
-    // 아래 폴백으로 내려간다.
-  }
-
-  if (!id) {
-    // 폴백: 검색 1회 (100 units). 결과를 캐시하므로 최초 1회만 든다.
-    // 핸들 문자열로 찾으므로 동명 채널을 잡을 수 있다 — 아래에서 확인을 요청한다.
-    var found = YouTube.Search.list('snippet', { q: handle, type: 'channel', maxResults: 1 });
-    if (found.items && found.items.length) {
-      id = found.items[0].snippet.channelId;
-      var ui = SpreadsheetApp.getUi();
-      var answer = ui.alert(
-        '채널 확인',
-        '핸들로 직접 찾지 못해 검색으로 골랐습니다.\n\n' +
-          '채널명: ' + found.items[0].snippet.title + '\n' +
-          'ID: ' + id + '\n\n이 채널이 맞습니까?',
-        ui.ButtonSet.YES_NO
-      );
-      if (answer !== ui.Button.YES) {
-        throw new Error('채널 선택을 취소했습니다. config의 유튜브채널핸들을 확인하세요.');
-      }
+    if (byHandle.items && byHandle.items.length) {
+      var found = byHandle.items[0].id;
+      props.setProperty('CHANNEL_ID', found);
+      return found;
     }
+    reason = '핸들 @' + handle + '로 채널을 찾지 못했습니다.';
+  } catch (err) {
+    // 실패 사유를 삼키지 않는다. 권한 문제인지 핸들 문제인지 여기서만 알 수 있다.
+    reason = String(err && err.message ? err.message : err);
   }
 
-  if (!id) throw new Error('채널을 찾지 못했습니다. config의 유튜브채널핸들을 확인하세요.');
+  var ui = SpreadsheetApp.getUi();
+  var answer = ui.prompt(
+    '채널 ID 입력',
+    '핸들로 채널을 찾지 못했습니다.\n\n' + reason + '\n\n' +
+      '유튜브 채널 페이지 주소를 그대로 붙여넣으세요.\n' +
+      '(youtube.com/channel/UC... 형태이거나, UC로 시작하는 24자 ID)\n\n' +
+      '한 번만 입력하면 저장되고, config의 유튜브채널ID에 넣어 두어도 됩니다.',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (answer.getSelectedButton() !== ui.Button.OK) {
+    throw new Error('채널 ID 입력을 취소했습니다.');
+  }
 
-  props.setProperty('CHANNEL_ID', id);
-  return id;
+  var typed = extractChannelId_(answer.getResponseText());
+  if (!typed) {
+    throw new Error('채널 ID를 알아보지 못했습니다. UC로 시작하는 24자여야 합니다. 입력값: ' +
+      String(answer.getResponseText() || '').trim());
+  }
+
+  props.setProperty('CHANNEL_ID', typed);
+  return typed;
+}
+
+/** 채널 ID만 뽑는다. 전체 주소를 붙여넣어도 되게 한다. */
+function extractChannelId_(value) {
+  var m = String(value || '').match(/UC[A-Za-z0-9_-]{22}/);
+  return m ? m[0] : '';
 }
 
 function fetchAllPlaylists_(channelId) {

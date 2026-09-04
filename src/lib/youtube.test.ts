@@ -10,6 +10,7 @@ describe('extractVideoId', () => {
       'youtu.be/vk1nDmhdy2w',
       'https://www.youtube.com/watch?v=vk1nDmhdy2w',
       'https://m.youtube.com/watch?v=vk1nDmhdy2w',
+      'https://music.youtube.com/watch?v=vk1nDmhdy2w',
       'https://www.youtube.com/shorts/vk1nDmhdy2w',
       'https://www.youtube.com/embed/vk1nDmhdy2w',
       'https://www.youtube.com/live/vk1nDmhdy2w',
@@ -23,6 +24,10 @@ describe('extractVideoId', () => {
   it('기존 메모의 깨진 ?is= 파라미터를 무시한다', () => {
     expect(extractVideoId('https://youtu.be/vk1nDmhdy2w?is=abc123XYZ')).toBe('vk1nDmhdy2w')
     expect(extractVideoId('https://youtu.be/vk1nDmhdy2w?si=abc123XYZ&t=30')).toBe('vk1nDmhdy2w')
+  })
+
+  it('music.youtube.com 링크도 읽는다 (실제 연합예배 공지에 쓰인 형태)', () => {
+    expect(extractVideoId('https://music.youtube.com/watch?v=RzUz3ny4Uzw&si=Np3jlZ6-BnG9cMw5')).toBe('RzUz3ny4Uzw')
   })
 
   it('플레이리스트 파라미터가 붙어도 영상 ID를 고른다', () => {

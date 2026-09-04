@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildMonthlySummary, buildNotice, formatRehearsalLine, formatTitle, noticeWarnings } from './notice'
-import { DEFAULT_CONFIG } from './schema'
+import { DEFAULT_CONFIG, parseConfig } from './schema'
 import type { PracticeLink, Rehearsal } from './types'
 
 function link(파트: string, URL: string, 검증 = true): PracticeLink {
@@ -26,33 +26,60 @@ const 기존메모링크 = [
 ]
 
 describe('buildNotice — 1곡 (기본 포맷)', () => {
-  it('기존 메모와 글자 단위로 같은 텍스트를 만든다', () => {
+  it('실제 카톡 공지(2026-08-23 "너는 교회가 되어라")와 글자 단위로 일치한다', () => {
+    // 실제로 대원들에게 나갔던 원문. 깨진 ?is= 파라미터까지 그대로 넣어
+    // 정규화 결과가 깨끗한 youtu.be 링크로 나오는지 함께 확인한다.
+    const 원문링크 = [
+      link('합창', 'https://youtu.be/vk1nDmhdy2w?is=dRFPJTN3LLh_16l-'),
+      link('소프라노', 'https://youtu.be/9yT6gnaWd6s?is=ocg9iJjz6ScKi9Tg'),
+      link('알토', 'https://youtu.be/xKhZ4ghUTaA?is=m9tRHekUZE6YndHx'),
+      link('테너', 'https://youtu.be/9-Be2IEo7so?is=mmt9x-yO66pN4hES'),
+      link('베이스', 'https://youtu.be/pv9dIez4KxI?is=xzGR2slr0B3EUXe4'),
+    ]
+
     const output = buildNotice({
-      service: { 찬양일: '2026-08-23', 예배구분: '주일 1부' },
+      service: { 찬양일: '2026-08-23', 예배구분: '주일' },
       rehearsals: 기존메모연습,
-      songs: [{ 표시명: '테스트곡 (중47-03)', 제목: '테스트곡', links: 기존메모링크 }],
+      songs: [{ 표시명: '너는 교회가 되어라', 제목: '너는 교회가 되어라', links: 원문링크 }],
       config: DEFAULT_CONFIG,
     })
 
     expect(output).toBe(
       [
         '8월 23일 주일 찬양',
+        '',
         '<성가연습 일정>',
         '9일 주일 1시 30분',
         '16일 주일 1시 30분',
         '19일 수요일 8시',
+        '',
         '(합창)',
         'https://youtu.be/vk1nDmhdy2w',
+        '',
         '(소프라노)',
         'https://youtu.be/9yT6gnaWd6s',
+        '',
         '(알토)',
         'https://youtu.be/xKhZ4ghUTaA',
+        '',
         '(테너)',
         'https://youtu.be/9-Be2IEo7so',
+        '',
         '(베이스)',
         'https://youtu.be/pv9dIez4KxI',
       ].join('\n'),
     )
+  })
+
+  it('공지_빈줄구분을 끄면 빈 줄 없이 붙는다', () => {
+    const output = buildNotice({
+      service: { 찬양일: '2026-08-23', 예배구분: '주일' },
+      rehearsals: 기존메모연습,
+      songs: [{ 표시명: 'x', 제목: 'x', links: 기존메모링크 }],
+      config: { ...DEFAULT_CONFIG, 공지_빈줄구분: false },
+    })
+    expect(output).not.toContain('\n\n')
+    expect(output).toContain('19일 수요일 8시\n(합창)')
   })
 
   it('1곡일 때는 곡명 헤더를 넣지 않는다', () => {
@@ -133,14 +160,18 @@ describe('buildNotice — 2곡 이상 (§7.1 분기)', () => {
     expect(output).toBe(
       [
         '12월 25일 성탄 찬양',
+        '',
         '<성가연습 일정>',
         '21일 주일 1시 30분',
         '24일 수요일 8시',
+        '',
         '1. 고요한 밤',
         '(합창)',
         'https://youtu.be/aaaaaaaaaaa',
+        '',
         '(소프라노)',
         'https://youtu.be/bbbbbbbbbbb',
+        '',
         '2. 기쁘다',
         '(합창)',
         'https://youtu.be/ccccccccccc',
@@ -178,15 +209,19 @@ describe('buildNotice — 2곡 이상 (§7.1 분기)', () => {
 })
 
 describe('공지_빈줄구분', () => {
-  it('TRUE면 구역 사이에 빈 줄을 넣는다', () => {
+  it('파트 블록 사이에도 빈 줄이 들어간다', () => {
     const output = buildNotice({
       service: { 찬양일: '2026-08-23', 예배구분: '주일' },
       rehearsals: 기존메모연습,
-      songs: [{ 표시명: 'x', 제목: 'x', links: [link('합창', 'https://youtu.be/vk1nDmhdy2w')] }],
-      config: { ...DEFAULT_CONFIG, 공지_빈줄구분: true },
+      songs: [{ 표시명: 'x', 제목: 'x', links: 기존메모링크 }],
+      config: DEFAULT_CONFIG,
     })
-    expect(output.split('\n')[1]).toBe('')
-    expect(output).toContain('19일 수요일 8시\n\n(합창)')
+    expect(output).toContain('https://youtu.be/vk1nDmhdy2w\n\n(소프라노)')
+    expect(output).toContain('https://youtu.be/xKhZ4ghUTaA\n\n(테너)')
+  })
+
+  it('config에 키가 없어도 기본값(빈 줄 있음)이 살아난다', () => {
+    expect(parseConfig([{ 키: '앱_제목', 값: '테스트' }]).공지_빈줄구분).toBe(true)
   })
 })
 

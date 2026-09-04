@@ -51,10 +51,12 @@ export function formatRehearsalLine(rehearsal: Rehearsal): string {
   return [day, rehearsal.구분, time].filter(Boolean).join(' ')
 }
 
-function partBlocks(links: PracticeLink[], order: Part[]): string[] {
+function partBlocks(links: PracticeLink[], order: Part[], spaced: boolean): string[] {
   const lines: string[] = []
   // 미검증 링크는 공지에서 제외한다 (§9.3). 링크 없는 파트는 블록 자체를 생략한다 (§7.2).
   for (const { part, link } of linksByPart(verifiedLinks(links), order)) {
+    // 실제 공지는 파트 블록 사이에도 빈 줄을 넣는다.
+    if (spaced && lines.length) lines.push('')
     lines.push(`(${part})`)
     lines.push(normalizeLink(link.URL, link.시작초).shareUrl)
   }
@@ -69,10 +71,12 @@ function partBlocks(links: PracticeLink[], order: Part[]): string[] {
 export function buildNotice(input: NoticeInput): string {
   const { service, rehearsals, songs, config } = input
   const lines: string[] = []
-  // 기존 메모(§7 예시)에는 구역 사이 빈 줄이 없다. 그대로 재현하는 것이 기본이고,
-  // 빈 줄을 넣고 싶은 총무를 위해 config로만 열어둔다.
+  // 실제 카톡 공지 원문(2025~2026년 기록)에는 제목·연습일정·각 파트 블록 사이에
+  // 빈 줄이 있다. 기획서 §7의 코드 블록에서 빈 줄이 사라져 있었을 뿐이다.
+  // 그래서 빈 줄이 기본이고, 끄고 싶을 때만 config로 끈다.
+  const spaced = config.공지_빈줄구분
   const gap = () => {
-    if (config.공지_빈줄구분 && lines.length) lines.push('')
+    if (spaced && lines.length) lines.push('')
   }
 
   lines.push(formatTitle(config.공지_제목형식, service))
@@ -92,14 +96,14 @@ export function buildNotice(input: NoticeInput): string {
 
   if (multi) {
     songs.forEach((song, i) => {
-      const blocks = partBlocks(song.links, config.공지_파트순서)
+      const blocks = partBlocks(song.links, config.공지_파트순서, spaced)
       if (!blocks.length) return
       gap()
       lines.push(`${i + 1}. ${song.제목}`)
       lines.push(...blocks)
     })
   } else {
-    const blocks = partBlocks(songs[0]?.links ?? [], config.공지_파트순서)
+    const blocks = partBlocks(songs[0]?.links ?? [], config.공지_파트순서, spaced)
     if (blocks.length) {
       gap()
       lines.push(...blocks)

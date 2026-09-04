@@ -28,6 +28,7 @@ var CONFIG_DEFAULTS = [
   ['시간대', 'America/Los_Angeles'],
   ['데이터시트목록', 'books,songs,services,rehearsals,practice_links,config'],
   ['유튜브채널핸들', 'JandAArt'],
+  ['유튜브채널ID', ''],
   ['연습기본패턴', '주일 13:30, 수요일 20:00'],
   ['중복경고개월', '12'],
   ['절기힌트', '1:일반, 3:사순, 4:부활, 10:추수감사, 11:대림, 12:성탄']
@@ -114,14 +115,24 @@ function installSongFormulas_(ss) {
 
   var a1 = function (c) { return sheet.getRange(2, c).getA1Notation().replace(/\d+$/, ''); };
 
-  // 수록번호는 2자리로 맞춘다 (중47-03). 빈 행에는 값을 만들지 않는다.
+  var book = a1(bookCol) + '2:' + a1(bookCol);
+  var no = a1(noCol) + '2:' + a1(noCol);
+  var title = a1(titleCol) + '2:' + a1(titleCol);
+  var code = a1(codeCol) + '2:' + a1(codeCol);
+
+  // 곡코드는 집코드와 수록번호가 **둘 다** 있을 때만 만든다.
+  // 수록번호가 비면 TEXT("","00")이 "00"이 되어 "중43-00" 같은 가짜 코드가 생긴다.
+  // (ARRAYFORMULA 안에서 OR()는 배열로 퍼지지 않으므로 불리언 덧셈을 쓴다.)
   sheet.getRange(2, codeCol).setFormula(
-    '=ARRAYFORMULA(IF(LEN(' + a1(bookCol) + '2:' + a1(bookCol) + ')=0,"",' +
-      a1(bookCol) + '2:' + a1(bookCol) + '&"-"&TEXT(' + a1(noCol) + '2:' + a1(noCol) + ',"00")))'
+    '=ARRAYFORMULA(IF((LEN(' + book + ')=0)+(LEN(' + no + ')=0),"",' +
+      book + '&"-"&TEXT(' + no + ',"00")))'
   );
+
+  // 표시명은 곡코드가 없으면 제목만 쓴다. 과거 기록을 백필할 때 악보집을 모르는 곡이
+  // 많은데, 여기서 "제목 ()"가 나오면 services·practice_links의 드롭다운 값이 전부 그 꼴이 된다.
   sheet.getRange(2, displayCol).setFormula(
-    '=ARRAYFORMULA(IF(LEN(' + a1(titleCol) + '2:' + a1(titleCol) + ')=0,"",' +
-      a1(titleCol) + '2:' + a1(titleCol) + '&" ("&' + a1(codeCol) + '2:' + a1(codeCol) + '&")"))'
+    '=ARRAYFORMULA(IF(LEN(' + title + ')=0,"",IF(LEN(' + code + ')=0,' + title + ',' +
+      title + '&" ("&' + code + '&")")))'
   );
 
   [codeCol, displayCol].forEach(function (c) {

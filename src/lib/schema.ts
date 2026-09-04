@@ -285,7 +285,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   공지_제목형식: '{M}월 {D}일 주일 찬양',
   공지_연습헤더: '<성가연습 일정>',
   공지_곡목표시: false,
-  공지_빈줄구분: false,
+  공지_빈줄구분: true,
   공지_파트순서: [...PART_ORDER],
   앱_제목: '성가대 아카이브',
   시간대: DEFAULT_TIMEZONE,
@@ -331,7 +331,9 @@ export function parseConfig(input: RawRow[] | Record<string, unknown> | undefine
     공지_제목형식: raw['공지_제목형식'] || DEFAULT_CONFIG.공지_제목형식,
     공지_연습헤더: raw['공지_연습헤더'] || DEFAULT_CONFIG.공지_연습헤더,
     공지_곡목표시: bool(raw['공지_곡목표시']),
-    공지_빈줄구분: bool(raw['공지_빈줄구분']),
+    // 키가 아예 없으면 기본값(TRUE)을 쓴다. bool('')은 false라서 그냥 넘기면
+    // config를 안 채운 시트에서 빈 줄이 사라진다.
+    공지_빈줄구분: raw['공지_빈줄구분'] ? bool(raw['공지_빈줄구분']) : DEFAULT_CONFIG.공지_빈줄구분,
     공지_파트순서: parts.length ? parts : DEFAULT_CONFIG.공지_파트순서,
     앱_제목: raw['앱_제목'] || DEFAULT_CONFIG.앱_제목,
     시간대: safeTimeZone(raw['시간대']),
