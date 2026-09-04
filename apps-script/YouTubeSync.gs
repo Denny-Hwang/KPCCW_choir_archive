@@ -366,35 +366,72 @@ function cacheReport() {
   }
 
   var byPlaylist = {};
+  var order = [];
   for (var i = 0; i < rows.length; i++) {
     var name = rows[i]['재생목록명'] || '(이름 없음)';
-    if (!byPlaylist[name]) byPlaylist[name] = { count: 0, book: parsePlaylistBook_(name) };
+    if (!byPlaylist[name]) {
+      byPlaylist[name] = { count: 0, book: parsePlaylistBook_(name) };
+      order.push(name);
+    }
     byPlaylist[name].count++;
   }
 
-  var books = [];
-  var others = [];
-  for (var name2 in byPlaylist) {
-    var line = name2 + '  (' + byPlaylist[name2].count + '개)';
-    if (byPlaylist[name2].book) books.push(byPlaylist[name2].book + '  ← ' + line);
-    else others.push(line);
-  }
-  books.sort();
-  others.sort();
+  // 인식된 권 / 다른 시리즈 / 그 밖으로 나눈다.
+  // "이름에 중앙성가 N집이 들어 있지만 다른 시리즈"를 따로 세워 두는 게 핵심이다.
+  // 이게 없으면 "왜 중2로 안 잡히지?"를 재생목록 이름만 보고는 알 수 없다.
+  var recognized = 0;
+  var otherSeries = 0;
+  var table = order.map(function (name) {
+    var info = byPlaylist[name];
+    var verdict;
+    if (info.book) { verdict = '인식됨'; recognized++; }
+    else if (/중앙성가\s*\d+\s*집/.test(name)) { verdict = '다른 시리즈 (본 중앙성가 아님)'; otherSeries++; }
+    else verdict = '집 번호 없음';
+    return [info.book || '', name, info.count, verdict];
+  });
+  table.sort(function (a, b) {
+    if (a[0] && b[0]) return bookNumber_(a[0]) - bookNumber_(b[0]) || a[1].localeCompare(b[1]);
+    if (a[0]) return -1;
+    if (b[0]) return 1;
+    return a[3].localeCompare(b[3]) || a[1].localeCompare(b[1]);
+  });
 
-  Logger.log('=== 중앙성가로 인식된 재생목록 ===\n' + books.join('\n') +
-    '\n\n=== 그 밖의 재생목록 ===\n' + others.join('\n'));
+  var sheet = ss.getSheetByName('_재생목록') || ss.insertSheet('_재생목록');
+  sheet.clear();
+  sheet.getRange(1, 1, 1, 4).setValues([['집코드', '재생목록명', '영상 수', '판정']]).setFontWeight('bold');
+  if (table.length) sheet.getRange(2, 1, table.length, 4).setValues(table);
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, 4);
+
+  // 보유 권 가운데 캐시에 재생목록이 없는 것.
+  var have = {};
+  table.forEach(function (r) { if (r[0]) have[r[0]] = true; });
+  var missing = [];
+  var books = readSheet_(ss, 'books', ss.getSpreadsheetTimeZone());
+  for (var b = 0; b < books.length; b++) {
+    var code = String(books[b]['집코드'] || '').trim();
+    if (code && toBool_(books[b]['보유']) && !have[code]) missing.push(code);
+  }
 
   ui.alert(
     '캐시 점검',
-    '캐시 ' + rows.length + '행 · 재생목록 ' + (books.length + others.length) + '개\n\n' +
-      '중앙성가로 인식된 재생목록 ' + books.length + '개:\n  ' +
-      (books.length ? books.slice(0, 20).join('\n  ') : '(없음)') + '\n\n' +
-      '그 밖의 재생목록 ' + others.length + '개 — 전체 목록은 [실행 로그]에서 볼 수 있습니다.\n' +
-      '찾으시는 집이 여기 있다면 이름이 "중앙성가 NN집" 형식이 아닌 것입니다.\n' +
-      '그럴 때는 [재생목록 직접 추가]로 주소를 넣으세요.',
+    '캐시 ' + rows.length + '행 · 재생목록 ' + table.length + '개\n' +
+      '  인식됨 ' + recognized + '개 · 다른 시리즈 ' + otherSeries + '개 · 집 번호 없음 ' +
+      (table.length - recognized - otherSeries) + '개\n\n' +
+      '전체 목록을 [_재생목록] 시트에 적었습니다. 거기서 찾으시는 권을 확인하세요.\n\n' +
+      (missing.length
+        ? '보유 권 중 캐시에 재생목록이 없는 것: ' + missing.join(', ') + '\n' +
+          '_재생목록 시트에서 이름이 다른 목록으로 들어 있지 않은지 보고,\n' +
+          '없으면 [재생목록 직접 추가]로 주소를 넣으세요.'
+        : '보유 권은 모두 재생목록을 찾았습니다.'),
     ui.ButtonSet.OK
   );
+}
+
+/** '중43' → 43. 정렬용. */
+function bookNumber_(code) {
+  var m = String(code || '').match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
 }
 
 /**
@@ -599,11 +636,32 @@ function matchVideos() {
 
 /**
  * 재생목록명 → 집코드.
+ *
  * 실제 이름은 "[중앙아트] 중앙성가 52집", "[합창 듣기] 중앙성가 40집"처럼 앞머리 태그가 다양하다.
+ * 태그는 걷어내되, 같은 채널에 이름 안에 "중앙성가 N집"을 품은 **다른 시리즈**가 함께 있다.
+ *
+ *   남성찬양대를 위한 중앙성가 2집 / 여성찬양대를 위한 중앙성가 2집 / 어린이 중앙성가 2집
+ *
+ * 이 셋을 전부 중2로 읽으면 서로 다른 세 권의 곡이 한 권에 섞인다(실제로 중3은 네 갈래였다).
+ * 그래서 대괄호 태그를 걷어낸 뒤 "중앙성가" 앞에 글자가 남으면 다른 시리즈로 본다.
+ * 뒤에 붙는 말("(구)", "- " 같은 것)은 같은 권의 다른 판이므로 그대로 받는다.
  */
 function parsePlaylistBook_(playlistName) {
-  var m = String(playlistName || '').match(/중앙성가\s*(\d+)\s*집/);
-  return m ? '중' + parseInt(m[1], 10) : null;
+  var name = String(playlistName || '').replace(/\[[^\]]*\]/g, ' ');
+  var m = name.match(/중앙성가\s*(\d+)\s*집/);
+  if (!m) return null;
+  if (bookQualifier_(name.slice(0, m.index))) return null;
+  return '중' + parseInt(m[1], 10);
+}
+
+/**
+ * "중앙성가" 앞에 남은 수식어. 공백·따옴표·구분자만 남으면 수식어가 없는 것이다.
+ * 값이 있으면 본 시리즈가 아니라는 뜻이다.
+ */
+function bookQualifier_(head) {
+  return String(head || '')
+    .replace(/[\s'"\u2018\u2019\u201C\u201D()\[\]|\uFF5C\u00B7\u30FB\-\u2013\u2014_:,]/g, '')
+    .trim();
 }
 
 var PART_PATTERNS = [
@@ -660,14 +718,13 @@ function parseVideoTitle_(rawTitle) {
 
   // 제목 안에도 집 이름이 들어 있다. 재생목록명이 애매할 때 쓴다.
   var head = numMatch ? cleaned.slice(0, numMatch.index) : '';
-  var bookMatch = head.match(/중앙성가\s*(\d+)\s*집/);
 
   return {
     number: number,
     title: title.replace(/^[\u2018\u2019\u201C\u201D'"]+|[\u2018\u2019\u201C\u201D'"]+$/g, '').trim(),
     part: part,
     isMidi: isMidi,
-    bookCode: bookMatch ? '중' + parseInt(bookMatch[1], 10) : null
+    bookCode: parsePlaylistBook_(head)
   };
 }
 
