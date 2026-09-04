@@ -180,9 +180,13 @@ function resolveChannelId_(ss) {
   var ui = SpreadsheetApp.getUi();
   var answer = ui.prompt(
     '채널 ID 입력',
-    '핸들로 채널을 찾지 못했습니다.\n\n' + reason + '\n\n' +
-      '유튜브 채널 페이지 주소를 그대로 붙여넣으세요.\n' +
-      '(youtube.com/channel/UC... 형태이거나, UC로 시작하는 24자 ID)\n\n' +
+    '핸들 @' + handle + '로 채널을 찾지 못했습니다.\n' + reason + '\n\n' +
+      '채널 ID(UC로 시작하는 24자)를 찾는 방법:\n' +
+      '  1. 브라우저에서 youtube.com/@' + handle + ' 를 엽니다\n' +
+      '  2. Ctrl+U (페이지 소스 보기)\n' +
+      '  3. Ctrl+F 로 externalId 를 찾습니다\n' +
+      '  4. 옆의 "UC..." 값을 복사해 아래에 붙여넣습니다\n\n' +
+      'UC로 시작하는 값이 들어 있으면 주소를 통째로 붙여넣어도 됩니다.\n' +
       '한 번만 입력하면 저장되고, config의 유튜브채널ID에 넣어 두어도 됩니다.',
     ui.ButtonSet.OK_CANCEL
   );
