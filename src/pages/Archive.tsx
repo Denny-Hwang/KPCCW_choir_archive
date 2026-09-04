@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { groupServicesByMonth, totalAttendance } from '../lib/derive'
 import { formatMonth, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
@@ -8,10 +9,23 @@ import { PartLinkChips } from '../components/PartLinks'
 
 /** 월별 아카이브 (§6.2). 연도 경계는 저장이 평면이라 자연히 넘어간다 (§3). */
 export default function Archive() {
+  // 홈의 "지난 찬양"에서 /archive/2025-10 으로 들어온다. 그 달을 펼치고 그리로 스크롤한다.
+  const { month: target } = useParams()
   const { data, loading, songs, links } = useArchive()
   const groups = useMemo(() => groupServicesByMonth(data.services), [data.services])
-  const [open, setOpen] = useState<Set<string>>(() => new Set([monthKey(todayKey())]))
-  const [year, setYear] = useState<string>('')
+  const [open, setOpen] = useState<Set<string>>(() => new Set([target || monthKey(todayKey())]))
+  const [year, setYear] = useState<string>(target ? target.slice(0, 4) : '')
+  const targetRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!target) return
+    setOpen((prev) => new Set(prev).add(target))
+    setYear(target.slice(0, 4))
+  }, [target])
+
+  useEffect(() => {
+    if (target && targetRef.current) targetRef.current.scrollIntoView({ block: 'start' })
+  }, [target, loading])
 
   if (loading && !data.services.length) return <Spinner />
   if (!groups.length) return <Empty title="아직 기록된 찬양이 없습니다." />
@@ -30,8 +44,10 @@ export default function Archive() {
 
   return (
     <div className="space-y-4">
+      {/* 붉은색은 "그 날의 실황영상"에만 쓴다. 게시판 전체로 가는 이 버튼까지 붉으면
+          목록에서 가장 큰 소리를 내는 것이 가장 덜 구체적인 동작이 된다. */}
       {data.config.예배영상URL && (
-        <RecordingButton fallbackUrl={data.config.예배영상URL} />
+        <RecordingButton fallbackUrl={data.config.예배영상URL} tone="quiet" />
       )}
 
       <div className="flex flex-wrap gap-1">
@@ -58,7 +74,13 @@ export default function Archive() {
         {visible.map((group) => {
           const expanded = open.has(group.month)
           return (
-            <div key={group.month} className="card overflow-hidden">
+            <div
+              key={group.month}
+              ref={group.month === target ? targetRef : undefined}
+              className={`card overflow-hidden ${
+                group.month === target ? 'ring-2 ring-stone-800 ring-offset-2 ring-offset-paper' : ''
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => toggle(group.month)}
@@ -112,8 +134,7 @@ export default function Archive() {
                           )}
                         </ul>
 
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500">
-                          {service.세션 && <span>세션 {service.세션}</span>}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
                           {record && (
                             <a
                               href={record.shareUrl}
@@ -127,7 +148,7 @@ export default function Archive() {
                               실황영상
                             </a>
                           )}
-
+                          {service.세션 && <span>세션 {service.세션}</span>}
                           {service.메모 && <span className="text-stone-400">{service.메모}</span>}
                         </div>
                       </li>

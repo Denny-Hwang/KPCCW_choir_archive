@@ -67,9 +67,7 @@ export function CopyBlock({ text, label, className = '' }: { text: string; label
       </div>
       {state === 'manual' && (
         <div className="mt-2">
-          <p className="mb-1 text-xs text-stone-500">
-            자동 복사가 막힌 브라우저입니다. 아래 내용을 길게 눌러 전체 선택 후 복사하세요.
-          </p>
+          <p className="mb-1 text-xs text-stone-500">길게 눌러 전체 선택한 뒤 복사하세요.</p>
           <textarea
             readOnly
             value={text}
@@ -103,10 +101,13 @@ export function Spinner({ label = '불러오는 중' }: { label?: string }) {
 export function RecordingButton({
   recordingUrl,
   fallbackUrl,
+  tone = 'loud',
   className = '',
 }: {
   recordingUrl?: string
   fallbackUrl?: string
+  /** 'quiet'는 게시판 전체로 가는 보조 동작. 붉은색은 그 날의 실황영상에만 쓴다. */
+  tone?: 'loud' | 'quiet'
   className?: string
 }) {
   const own = (recordingUrl ?? '').trim()
@@ -114,12 +115,17 @@ export function RecordingButton({
   const href = own || site
   if (!href) return null
 
+  const skin =
+    tone === 'quiet'
+      ? 'border border-stone-300 bg-white text-stone-600 hover:bg-stone-50'
+      : 'bg-rose-600 text-white hover:bg-rose-500'
+
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className={`btn w-full bg-rose-600 text-white hover:bg-rose-500 ${className}`}
+      className={`btn w-full ${skin} ${className}`}
     >
       <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 shrink-0 fill-current">
         <path d="M8 5v14l11-7z" />

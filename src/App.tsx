@@ -79,6 +79,7 @@ function Chrome() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/archive" element={<Archive />} />
+          <Route path="/archive/:month" element={<Archive />} />
           <Route path="/library" element={<Library />} />
           <Route path="/shelf" element={<Shelf />} />
           <Route path="/shelf/:bookCode" element={<Shelf />} />
@@ -125,9 +126,6 @@ function StatusBar({
     return (
       <div className="mx-4 mt-2 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-800">
         <p className="font-semibold">자료를 불러오지 못했습니다.</p>
-        <p className="opacity-80">
-          잠시 후 다시 시도해 주세요. 교회 와이파이가 불안정할 때 종종 생깁니다.
-        </p>
         {error && <p className="mt-1 break-all opacity-60">{error}</p>}
         <button
           type="button"

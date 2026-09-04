@@ -5,6 +5,7 @@ import { buildCandidates } from '../lib/planner'
 import { todayKey } from '../lib/date'
 import { SongRow } from '../components/SongRow'
 import { Empty, Spinner } from '../components/ui'
+import { normalizeHex, textOn } from '../lib/color'
 
 /** 서가 뷰 (§6.4). 표지색으로 칠한 책등을 권 번호순으로, 미보유 권은 빈 슬롯. */
 export default function Shelf() {
@@ -33,11 +34,14 @@ export default function Shelf() {
         </button>
 
         <div className="card overflow-hidden">
-          <div className="px-4 py-3 text-white" style={{ backgroundColor: selected.표지색 || '#57534e' }}>
+          <div
+            className="px-4 py-3"
+            style={{ backgroundColor: normalizeHex(selected.표지색), color: textOn(selected.표지색) }}
+          >
             <p className="text-lg font-extrabold">
               {selected.시리즈} {selected.권 ?? ''}집
             </p>
-            <p className="text-xs opacity-80">
+            <p className="text-xs opacity-75">
               {[selected.편저 && `편저 ${selected.편저}`, selected.출판사, selected.성부, selected.출판연도]
                 .filter(Boolean)
                 .join(' · ')}
@@ -79,16 +83,18 @@ export default function Shelf() {
         <Link
           key={book.집코드}
           to={`/shelf/${encodeURIComponent(book.집코드)}`}
-          className={`flex aspect-[2/3] flex-col justify-between rounded-lg p-2 text-white shadow-sm transition hover:brightness-110 ${
-            book.보유 ? '' : 'opacity-40 ring-1 ring-inset ring-stone-300'
+          className={`flex aspect-[2/3] flex-col justify-between rounded-lg p-2 shadow-sm transition hover:brightness-110 ${
+            book.보유 ? '' : 'text-stone-500 opacity-40 ring-1 ring-inset ring-stone-300'
           }`}
-          style={{ backgroundColor: book.보유 ? book.표지색 || '#57534e' : 'transparent' }}
+          style={
+            book.보유
+              ? { backgroundColor: normalizeHex(book.표지색), color: textOn(book.표지색) }
+              : { backgroundColor: 'transparent' }
+          }
         >
-          <span className={`text-xs font-bold ${book.보유 ? '' : 'text-stone-500'}`}>{book.시리즈}</span>
-          <span className={`text-2xl font-black leading-none ${book.보유 ? '' : 'text-stone-500'}`}>
-            {book.권 ?? '—'}
-          </span>
-          <span className={`text-[10px] ${book.보유 ? 'opacity-80' : 'text-stone-400'}`}>
+          <span className="text-xs font-bold">{book.시리즈}</span>
+          <span className="text-2xl font-black leading-none">{book.권 ?? '—'}</span>
+          <span className={`text-[10px] ${book.보유 ? 'opacity-75' : 'text-stone-400'}`}>
             {book.보유 ? `${counts.get(book.집코드) ?? 0}곡` : '미보유'}
           </span>
         </Link>

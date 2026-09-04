@@ -21,7 +21,7 @@ export function SongMeta({ candidate }: { candidate: SongCandidate }) {
       ) : lastSung ? (
         <Badge>마지막 {lastSung}</Badge>
       ) : (
-        <Badge tone="ok">부른 적 없음</Badge>
+        <Badge>부른 적 없음</Badge>
       )}
       {hasParts ? (
         <Badge tone="ok">파트 영상 {verifiedLinkCount}</Badge>

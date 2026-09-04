@@ -186,8 +186,7 @@ export default function Planner() {
 
       <Section title="시트 붙여넣기 블록">
         <p className="mb-2 text-xs text-stone-500">
-          시트를 열고 해당 시트의 <strong>마지막 행 다음 칸</strong>을 선택한 뒤 붙여넣으면 그대로 행이 됩니다.
-          앱은 시트에 직접 쓰지 않습니다.
+          해당 시트의 <strong>마지막 행 다음 칸</strong>을 선택하고 붙여넣으세요.
         </p>
         <div className="space-y-3">
           <PasteBlock title="services" columns={SERVICE_COLUMNS} text={servicePaste} />

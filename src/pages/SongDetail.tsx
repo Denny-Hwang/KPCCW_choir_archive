@@ -20,7 +20,7 @@ export default function SongDetail() {
   }, [data.songs, songCode])
 
   if (loading && !data.songs.length) return <Spinner />
-  if (!song) return <Empty title="곡을 찾을 수 없습니다." hint="곡코드가 바뀌었거나 시트에서 삭제되었을 수 있습니다." />
+  if (!song) return <Empty title="곡을 찾을 수 없습니다." />
 
   const book = data.books.find((b) => b.집코드 === song.집코드)
   const songLinks = links.get(song.표시명) ?? []

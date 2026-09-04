@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { buildNotice, noticeWarnings } from '../lib/notice'
 import { buildServiceView, pickFeaturedService, songPath, totalAttendance } from '../lib/derive'
-import { formatKoreanTime, formatLongDate, formatMonthDay, todayKey } from '../lib/date'
+import { formatKoreanTime, formatLongDate, formatMonthDay, monthKey, todayKey } from '../lib/date'
 import { PartLinks } from '../components/PartLinks'
 import { CopyBlock, Empty, RecordingButton, Section, Spinner } from '../components/ui'
 
@@ -94,7 +94,12 @@ export default function Home() {
             </p>
           )}
 
-          <RecordingButton recordingUrl={featured.기록영상URL} fallbackUrl={data.config.예배영상URL} />
+          {/* 다가오는 찬양에는 아직 실황영상이 있을 수 없다. 게시판으로 보내는 안내는
+              지난 찬양일 때만 뜻이 있다. */}
+          <RecordingButton
+            recordingUrl={featured.기록영상URL}
+            fallbackUrl={upcoming ? undefined : data.config.예배영상URL}
+          />
         </div>
       </div>
 
@@ -116,20 +121,34 @@ export default function Home() {
               const total = totalAttendance(s)
               const rehearsalCount = (rehearsals.get(s.찬양일) ?? []).length
               return (
-                <li key={s.찬양일} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-semibold">{formatMonthDay(s.찬양일)}</p>
-                    <p className="truncate text-xs text-stone-500">
-                      {s.곡.map((title) => songs.get(title)?.제목 ?? title).join(' / ') || '선곡 미정'}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-xs text-stone-400">
-                    {total != null
-                      ? `총 ${total}명`
-                      : rehearsalCount > 0
-                        ? `${rehearsalCount}회 연습`
-                        : ''}
-                  </span>
+                <li key={s.찬양일}>
+                  {/* 그냥 목록이면 여기서 막힌다. 그 달 아카이브를 열어 준다. */}
+                  <Link
+                    to={`/archive/${monthKey(s.찬양일)}`}
+                    className="flex items-center justify-between gap-3 px-4 py-3 text-sm hover:bg-stone-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold">
+                        {formatMonthDay(s.찬양일)}
+                        {s.예배구분 && <span className="ml-1 text-xs font-normal text-stone-400">{s.예배구분}</span>}
+                      </p>
+                      <p className="truncate text-xs text-stone-500">
+                        {s.곡.map((title) => songs.get(title)?.제목 ?? title).join(' / ') || '선곡 미정'}
+                      </p>
+                    </div>
+                    <span className="flex shrink-0 items-center gap-1.5 text-xs text-stone-400">
+                      {s.기록영상URL && (
+                        <svg viewBox="0 0 24 24" aria-label="실황영상 있음" className="h-3 w-3 fill-rose-600">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                      {total != null
+                        ? `총 ${total}명`
+                        : rehearsalCount > 0
+                          ? `${rehearsalCount}회 연습`
+                          : ''}
+                    </span>
+                  </Link>
                 </li>
               )
             })}
