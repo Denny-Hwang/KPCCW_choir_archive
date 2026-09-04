@@ -351,6 +351,122 @@ function loadSeenKeys_(sheet) {
 }
 
 /**
+ * 캐시 점검 — 메뉴: 성가 아카이브 > 캐시 점검
+ *
+ * "채널에 재생목록이 없다"는 말이 맞는지 확인한다. 동기화가 못 가져온 것인지,
+ * 재생목록 이름이 규칙에 안 맞는 것인지는 캐시를 봐야 안다.
+ */
+function cacheReport() {
+  var ui = SpreadsheetApp.getUi();
+  var ss = getSpreadsheet_();
+  var rows = readCacheRows_(ss);
+  if (!rows.length) {
+    ui.alert('yt_cache가 비어 있습니다. 먼저 [채널 동기화]를 실행하세요.');
+    return;
+  }
+
+  var byPlaylist = {};
+  for (var i = 0; i < rows.length; i++) {
+    var name = rows[i]['재생목록명'] || '(이름 없음)';
+    if (!byPlaylist[name]) byPlaylist[name] = { count: 0, book: parsePlaylistBook_(name) };
+    byPlaylist[name].count++;
+  }
+
+  var books = [];
+  var others = [];
+  for (var name2 in byPlaylist) {
+    var line = name2 + '  (' + byPlaylist[name2].count + '개)';
+    if (byPlaylist[name2].book) books.push(byPlaylist[name2].book + '  ← ' + line);
+    else others.push(line);
+  }
+  books.sort();
+  others.sort();
+
+  Logger.log('=== 중앙성가로 인식된 재생목록 ===\n' + books.join('\n') +
+    '\n\n=== 그 밖의 재생목록 ===\n' + others.join('\n'));
+
+  ui.alert(
+    '캐시 점검',
+    '캐시 ' + rows.length + '행 · 재생목록 ' + (books.length + others.length) + '개\n\n' +
+      '중앙성가로 인식된 재생목록 ' + books.length + '개:\n  ' +
+      (books.length ? books.slice(0, 20).join('\n  ') : '(없음)') + '\n\n' +
+      '그 밖의 재생목록 ' + others.length + '개 — 전체 목록은 [실행 로그]에서 볼 수 있습니다.\n' +
+      '찾으시는 집이 여기 있다면 이름이 "중앙성가 NN집" 형식이 아닌 것입니다.\n' +
+      '그럴 때는 [재생목록 직접 추가]로 주소를 넣으세요.',
+    ui.ButtonSet.OK
+  );
+}
+
+/**
+ * 재생목록 직접 추가 — 메뉴: 성가 아카이브 > 재생목록 직접 추가
+ *
+ * 채널 재생목록 목록에 안 잡히는 경우가 있다. 다른 계정이 만든 목록이거나,
+ * 미등록(unlisted) 목록이면 playlists.list에 나오지 않는다.
+ * 주소를 직접 받아 그 목록만 캐시에 넣는다.
+ */
+function addPlaylistPrompt() {
+  var ui = SpreadsheetApp.getUi();
+  var res = ui.prompt(
+    '재생목록 직접 추가',
+    '유튜브 재생목록 주소나 ID를 붙여넣으세요.\n' +
+      '(youtube.com/playlist?list=PL... 형태이거나 PL로 시작하는 ID)',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  var m = String(res.getResponseText() || '').match(/(PL[A-Za-z0-9_-]{10,})/);
+  if (!m) {
+    ui.alert('재생목록 ID를 알아보지 못했습니다. PL로 시작하는 값이 있어야 합니다.');
+    return;
+  }
+
+  try {
+    var ss = getSpreadsheet_();
+    var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
+    var sheet = getCacheSheet_(ss);
+    var seen = loadSeenKeys_(sheet);
+    var stamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
+
+    var meta = YouTube.Playlists.list('snippet', { id: m[1] });
+    var title = meta.items && meta.items.length ? meta.items[0].snippet.title : '(제목 없음)';
+
+    var rows = [];
+    var token = null;
+    do {
+      var page = YouTube.PlaylistItems.list('snippet', { playlistId: m[1], maxResults: 50, pageToken: token });
+      (page.items || []).forEach(function (item) {
+        var sn = item.snippet || {};
+        var vid = sn.resourceId && sn.resourceId.videoId;
+        if (!vid) return;
+        if (sn.title === 'Deleted video' || sn.title === 'Private video') return;
+        if (seen[vid + '|' + m[1]]) return;
+        seen[vid + '|' + m[1]] = true;
+        rows.push([vid, sn.title || '', title, m[1],
+          typeof sn.position === 'number' ? sn.position + 1 : '',
+          sn.publishedAt ? String(sn.publishedAt).slice(0, 10) : '', stamp]);
+      });
+      token = page.nextPageToken || '';
+    } while (token);
+
+    if (rows.length) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CACHE_HEADERS.length).setValues(rows);
+    }
+
+    ui.alert(
+      '재생목록 추가 완료',
+      '"' + title + '"\n신규 ' + rows.length + '행 추가.\n\n' +
+        (parsePlaylistBook_(title)
+          ? '이 이름은 ' + parsePlaylistBook_(title) + '으로 인식됩니다. 이어서 [악보집 일괄 등록]을 실행하세요.'
+          : '⚠ 이 이름에서는 집 번호를 읽을 수 없습니다. 영상 제목에 "중앙성가 NN집"이\n' +
+            '들어 있으면 그것으로 인식되고, 아니면 매칭되지 않습니다.'),
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('추가 실패', String(err && err.message ? err.message : err), ui.ButtonSet.OK);
+  }
+}
+
+/**
  * 제목 형식 확인 (§11 미결정 항목).
  * 매칭 규칙을 정하기 전에 실제 영상 제목이 어떤 모양인지 눈으로 보기 위한 것.
  */

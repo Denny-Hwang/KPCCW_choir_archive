@@ -166,6 +166,8 @@ function onOpen() {
     .addSeparator()
     .addItem('채널 동기화', 'syncChannel')
     .addItem('제목 형식 확인', 'sampleTitles')
+    .addItem('캐시 점검', 'cacheReport')
+    .addItem('재생목록 직접 추가', 'addPlaylistPrompt')
     .addItem('영상 매칭', 'matchVideos')
     .addItem('악보집 일괄 등록', 'registerOwnedBooks')
     .addItem('악보집 등록 (한 권)', 'registerBookPrompt')
