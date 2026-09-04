@@ -59,26 +59,27 @@
         .replace(/\s+/g, ' ')
         .trim()
 
-      // 화면의 "공연 | 날짜"에서 |는 CSS로 그린 선이라 텍스트에는 없다. 날짜만 찾는다.
-      const meta = text.match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
+      // 화면의 `제목 ｜공연｜ 날짜`. 구분자는 전각 ｜(U+FF5C)이다.
+      // 일부 페이지에는 그 앞에 플레이어 경고문이 끼어들고, 빵부스러기도 항상 붙는다.
+      const meta = text.match(/[｜|]\s*([^｜|]{2,40}?)\s*[｜|]\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
       if (!meta) {
         stat.noMeta++
         if (!sample && text.length > 40) sample = { num, text: text.slice(0, 900) }
         continue
       }
 
-      const 날짜 = `${meta[1]}-${String(meta[2]).padStart(2, '0')}-${String(meta[3]).padStart(2, '0')}`
-      const before = text.slice(0, meta.index)
-
-      // 제목은 따옴표로 감싸여 있다. 날짜 앞의 마지막 것.
-      const quoted = [...before.matchAll(/["“”]([^"“”]{2,60})["“”]/g)]
-      const last = quoted[quoted.length - 1]
-      const 제목 = last ? last[1].trim() : ''
-
-      // 공연명은 제목과 날짜 사이에 남는다.
-      const between = last ? before.slice(last.index + last[0].length) : before.slice(-60)
-      const 공연 = between.replace(/[|]/g, ' ').replace(/\s+/g, ' ').trim()
+      const 공연 = meta[1].trim()
       if (PERFORMER && !공연.includes(PERFORMER)) { stat.otherPerformer++; continue }
+
+      const 날짜 = `${meta[2]}-${String(meta[3]).padStart(2, '0')}-${String(meta[4]).padStart(2, '0')}`
+
+      // 제목은 ｜ 앞에 남는다. 빵부스러기와 경고문을 잘라낸 뒤의 꼬리가 제목이다.
+      let head = text.slice(0, meta.index)
+      for (const cut of ['특송(Special Music)', '트래픽 초과 안내', '취소 재생', '재생하시겠습니까?']) {
+        const i = head.lastIndexOf(cut)
+        if (i >= 0) head = head.slice(i + cut.length)
+      }
+      const 제목 = head.replace(/["“”']/g, '').replace(/\s+/g, ' ').trim()
 
       found.push({ num, 날짜, 제목, 공연, url: location.origin + path })
       console.log('✔', num, 날짜, 제목)

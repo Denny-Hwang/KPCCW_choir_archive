@@ -79,23 +79,27 @@ export function clean(html) {
 
 /**
  * 상세 페이지에서 제목·공연·날짜를 뽑는다.
- * 화면은 `"참 아름다워라" / KPCCW 성가대 | 2026.05.24` 로 보이지만,
- * 가운데 세로줄은 CSS로 그린 선이라 텍스트에는 남지 않는다. 그래서 날짜를 기준점으로 삼는다.
+ *
+ * 실제 구조는 `제목 ｜공연｜ 날짜`이고 **구분자가 전각 ｜(U+FF5C)** 이다.
+ * 일부 페이지에는 제목 앞에 플레이어 경고문
+ * ("… 재생하시겠습니까? 취소 재생 트래픽 초과 안내")이 끼어들고, 빵부스러기도 항상 붙는다.
  */
+const TITLE_CUTS = ['특송(Special Music)', '트래픽 초과 안내', '취소 재생', '재생하시겠습니까?']
+
 export function parseDetail(html) {
   const text = clean(html)
-  const m = text.match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
+  const m = text.match(/[｜|]\s*([^｜|]{2,40}?)\s*[｜|]\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
   if (!m) return null
 
-  const 날짜 = `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`
-  const before = text.slice(0, m.index)
+  const 공연 = m[1].trim()
+  const 날짜 = `${m[2]}-${String(m[3]).padStart(2, '0')}-${String(m[4]).padStart(2, '0')}`
 
-  const quoted = [...before.matchAll(/["“”]([^"“”]{2,60})["“”]/g)]
-  const last = quoted[quoted.length - 1]
-  const 제목 = last ? last[1].trim() : ''
-
-  const between = last ? before.slice(last.index + last[0].length) : before.slice(-60)
-  const 공연 = between.replace(/[|]/g, ' ').replace(/\s+/g, ' ').trim()
+  let head = text.slice(0, m.index)
+  for (const cut of TITLE_CUTS) {
+    const i = head.lastIndexOf(cut)
+    if (i >= 0) head = head.slice(i + cut.length)
+  }
+  const 제목 = head.replace(/["“”']/g, '').replace(/\s+/g, ' ').trim()
 
   return { 제목, 공연, 날짜 }
 }

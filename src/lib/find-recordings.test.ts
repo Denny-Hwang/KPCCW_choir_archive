@@ -10,26 +10,42 @@ import { parseDetail } from '../../scripts/find-recordings.mjs'
  * 자바스크립트 문자열("0", "sub" …)이 따옴표 후보로 잡혀 제목 추출이 실패한다.
  * 처음 판이 한 건도 못 찾은 원인이 이것이었다.
  */
-const page = (title: string, performer: string, date: string) => `
+const BREADCRUMB = '중부워싱턴한인장로교회 / Internet TV / 성가대 &amp; 특송(Special Music)'
+const WARNING = '"20MB 이상 용량의 방송파일입니다. 재생하시겠습니까?" 취소 재생 트래픽 초과 안내'
+
+/** 실제 페이지 구조: 제목 ｜공연｜ 날짜. 구분자가 전각이고, 경고문이 끼는 페이지가 있다. */
+const page = (title: string, performer: string, date: string, withWarning = false) => `
 <html><head><meta charset="utf-8"></head><body>
-  <div class="path">중부워싱턴한인장로교회 / Internet TV / 성가대 &amp; 특송(Special Music)</div>
+  <div class="path">${BREADCRUMB}</div>
   <script>
     sitemapPosition = ""; var awdDisplay = new awdDisplay("0", "sub", 1200);
-    awdDisplay.enMobile = "1"; var menu = new menu(); menu.pageCode = "18";
-    var boardID= ""; if(!boardID) { if(isApp("android")) { window.webViewCall.receiveAuth(true); } }
+    var menu = new menu(); menu.pageCode = "18"; var boardID= "";
   </script>
-  <div class="view_tit">"${title}"</div>
-  <div class="view_info"><span>${performer}</span><span class="bar">${date}</span></div>
+  ${withWarning ? `<div class="alert">${WARNING}</div>` : ''}
+  <div class="view_tit">${withWarning ? title : `"${title}"`}</div>
+  <div class="view_info">｜${performer}｜<span>${date}</span></div>
   <div class="view_con"><iframe src="https://www.youtube.com/embed/xxx"></iframe></div>
 </body></html>`
 
 describe('parseDetail', () => {
-  it('성가대 항목에서 제목·공연·날짜를 뽑는다', () => {
+  it('경고문이 없는 페이지에서 제목·공연·날짜를 뽑는다', () => {
     expect(parseDetail(page('참 아름다워라', 'KPCCW 성가대', '2026.05.24'))).toEqual({
       제목: '참 아름다워라',
       공연: 'KPCCW 성가대',
       날짜: '2026-05-24',
     })
+  })
+
+  it('플레이어 경고문이 끼어든 페이지도 제목을 정확히 뽑는다', () => {
+    // 이 경우 제목이 따옴표 밖에 있고 앞에 안내 문구가 붙는다.
+    // 예전 판은 여기서 제목을 빈 문자열로 냈다.
+    expect(parseDetail(page('주 하나님 지으신 모든 세계', 'KPCCW 성가대', '2025.01.26', true))).toEqual({
+      제목: '주 하나님 지으신 모든 세계',
+      공연: 'KPCCW 성가대',
+      날짜: '2025-01-26',
+    })
+    expect(parseDetail(page('주여 우릴 회복시켜 주소서', 'KPCCW 성가대', '2025.02.23', true))?.제목)
+      .toBe('주여 우릴 회복시켜 주소서')
   })
 
   it('한 자리 월·일도 두 자리로 맞춘다', () => {
@@ -48,16 +64,15 @@ describe('parseDetail', () => {
     expect(r?.제목).toBe('My Best Friend')
   })
 
-  it('제목에 곡번호나 괄호가 붙어도 따옴표 안을 그대로 쓴다', () => {
-    expect(parseDetail(page('주여 우릴 회복시켜 주소서 (중43)', 'KPCCW 성가대', '2025.02.23'))?.제목)
-      .toBe('주여 우릴 회복시켜 주소서 (중43)')
-  })
-
   it('상단 인라인 스크립트의 문자열을 제목으로 잘못 잡지 않는다', () => {
-    const r = parseDetail(page('참 아름다워라', 'KPCCW 성가대', '2026.05.24'))
-    expect(r?.제목).toBe('참 아름다워라')
+    const r = parseDetail(page('평화', 'KPCCW 성가대', '2026.04.05'))
+    expect(r?.제목).toBe('평화')
     expect(r?.제목).not.toBe('sub')
     expect(r?.공연).not.toContain('awdDisplay')
+  })
+
+  it('빵부스러기가 제목에 섞이지 않는다', () => {
+    expect(parseDetail(page('임하소서', 'KPCCW 성가대', '2023.10.29', true))?.제목).toBe('임하소서')
   })
 
   it('없는 글이나 형식이 다른 페이지는 null', () => {

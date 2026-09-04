@@ -148,8 +148,8 @@ Apps Script 편집기에서 **배포 > 새 배포 > 웹 앱**:
    기록이 없으면 그 기능이 몇 달간 비어 있습니다. 곡 목록보다 이게 먼저입니다.
 3. 곡은 선곡할 때마다 한 곡씩 추가해도 됩니다.
 
-2025~2026년 기록은 이미 옮겨 두었습니다 →
-[`docs/BACKFILL-2025-2026.md`](docs/BACKFILL-2025-2026.md)
+2023~2026년 기록은 이미 옮겨 두었습니다 →
+[`docs/BACKFILL-2023-2026.md`](docs/BACKFILL-2023-2026.md)
 
 ---
 
@@ -278,7 +278,7 @@ npm run verify -- https://script.google.com/macros/s/.../exec
 |---|---|
 | [`docs/SPEC.md`](docs/SPEC.md) | 기획서 원문 |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | 만들면서 내린 판단과 남은 숙제 |
-| [`docs/BACKFILL-2025-2026.md`](docs/BACKFILL-2025-2026.md) | 2025~2026 기록 붙여넣기 블록 |
+| [`docs/BACKFILL-2023-2026.md`](docs/BACKFILL-2023-2026.md) | 2023~2026 기록 붙여넣기 블록 |
 | [`docs/CONFIG-PASTE.md`](docs/CONFIG-PASTE.md) | `config` 시트 최신 기본값 |
 
 ## 설정 항목
