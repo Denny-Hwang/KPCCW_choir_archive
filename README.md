@@ -63,10 +63,16 @@ Apps Script 편집기에서 **배포 > 새 배포 > 웹 앱**:
 
 ### 3. 앱 배포
 
-1. 저장소 Settings > Pages > Source를 **GitHub Actions**로 바꾼다.
-2. Settings > Secrets and variables > Actions > Variables에 `VITE_API_URL`을 위 URL로 추가한다.
+1. 저장소 Settings > General > Default branch가 **`main`인지 확인한다.**
+2. Settings > Pages > Source를 **GitHub Actions**로 바꾼다.
+3. Settings > Secrets and variables > Actions > Variables에 `VITE_API_URL`을 위 URL로 추가한다.
    (건너뛰어도 된다 — 앱의 설정 화면에서 각자 넣을 수 있다.)
-3. `main`에 푸시하면 배포된다.
+4. `main`에 푸시하면 배포된다.
+
+> **1번을 건너뛰면 배포가 조용히 실패한다.** `github-pages` 환경은 기본 브랜치에서만
+> 배포를 허용한다. 기본 브랜치가 `main`이 아니면 build 잡은 초록색으로 끝나는데
+> deploy 잡만 **스텝을 하나도 실행하지 못하고 즉시 실패하고, 로그도 비어 있다.**
+> 원인을 찾기 어려우니 먼저 확인할 것.
 
 ### 4. 데이터 넣기
 
