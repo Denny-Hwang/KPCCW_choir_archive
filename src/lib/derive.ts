@@ -176,6 +176,17 @@ export function seasonHintFor(month: number, config: AppConfig): string {
   return config.절기힌트[month] ?? ''
 }
 
+/**
+ * 곡 상세 화면의 주소.
+ *
+ * 곡코드는 집코드와 수록번호가 둘 다 있어야 생긴다. 과거 기록을 백필한 곡은
+ * 악보집을 모르는 경우가 많아 곡코드가 비는데, 그때 `/song/`처럼 빈 주소가 만들어져
+ * 라우트에 걸리지 않고 "없는 화면입니다"가 떴다. 표시명으로 대신 연다.
+ */
+export function songPath(song: Pick<Song, '곡코드' | '표시명'>): string {
+  return `/song/${encodeURIComponent(song.곡코드 || song.표시명)}`
+}
+
 /** 링크 중 유튜브 ID를 못 뽑은 것 (§8 경고 목록). */
 export function brokenLinks(links: PracticeLink[]): PracticeLink[] {
   return links.filter((l) => normalizeLink(l.URL, l.시작초).unrecognized)

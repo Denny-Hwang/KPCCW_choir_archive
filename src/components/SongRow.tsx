@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { formatMonthDay } from '../lib/date'
+import { songPath } from '../lib/derive'
 import type { SongCandidate } from '../lib/planner'
 import { Badge, UnverifiedBadge } from './ui'
 
@@ -35,7 +36,7 @@ export function SongRow({ candidate }: { candidate: SongCandidate }) {
   const { song, lastSung } = candidate
   return (
     <li className={`px-4 py-3 ${song.검증 ? '' : 'opacity-60'}`}>
-      <Link to={`/song/${encodeURIComponent(song.곡코드)}`} className="block">
+      <Link to={songPath(song)} className="block">
         <div className="flex items-baseline justify-between gap-2">
           <p className="font-semibold">{song.제목 || song.표시명}</p>
           {lastSung && <span className="shrink-0 text-xs text-stone-400">마지막 {formatMonthDay(lastSung)}</span>}

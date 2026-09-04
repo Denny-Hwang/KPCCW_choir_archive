@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { buildNotice, noticeWarnings } from '../lib/notice'
-import { buildServiceView, pickFeaturedService, totalAttendance } from '../lib/derive'
+import { buildServiceView, pickFeaturedService, songPath, totalAttendance } from '../lib/derive'
 import { formatKoreanTime, formatLongDate, formatMonthDay, todayKey } from '../lib/date'
 import { PartLinks } from '../components/PartLinks'
 import { CopyBlock, Empty, RecordingButton, Section, Spinner } from '../components/ui'
@@ -58,7 +58,7 @@ export default function Home() {
                 <div className="flex flex-wrap items-baseline gap-2">
                   {view.songs.length > 1 && <span className="text-sm font-bold text-stone-400">{i + 1}.</span>}
                   {song.song ? (
-                    <Link to={`/song/${encodeURIComponent(song.song.곡코드)}`} className="text-lg font-bold underline decoration-stone-300 underline-offset-4">
+                    <Link to={songPath(song.song)} className="text-lg font-bold underline decoration-stone-300 underline-offset-4">
                       {song.제목}
                     </Link>
                   ) : (

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { groupServicesByMonth, totalAttendance } from '../lib/derive'
 import { formatMonth, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
@@ -97,13 +96,9 @@ export default function Archive() {
                               const song = songs.get(표시명)
                               return (
                                 <li key={표시명} className="text-sm">
-                                  {song ? (
-                                    <Link to={`/song/${encodeURIComponent(song.곡코드)}`} className="underline decoration-stone-300 underline-offset-2">
-                                      {song.제목}
-                                    </Link>
-                                  ) : (
-                                    표시명
-                                  )}
+                                  {/* 목록에서는 곡 상세로 보내지 않는다. 여기서 필요한 것은
+                                      곡 이름과 파트 링크지, 한 단계 더 들어가는 것이 아니다. */}
+                                  {song?.제목 || 표시명}
                                   {song?.곡코드 && <span className="ml-1 text-xs text-stone-400">{song.곡코드}</span>}
                                   <PartLinkChips
                                     links={links.get(표시명) ?? []}

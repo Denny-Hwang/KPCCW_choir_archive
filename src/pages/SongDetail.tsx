@@ -13,8 +13,10 @@ export default function SongDetail() {
   const { data, loading, links, history } = useArchive()
 
   const song = useMemo(() => {
-    const code = decodeURIComponent(songCode ?? '')
-    return data.songs.find((s) => s.곡코드 === code) ?? null
+    const key = decodeURIComponent(songCode ?? '')
+    if (!key) return null
+    // 곡코드가 없는 곡(악보집 미상)은 표시명으로 찾는다.
+    return data.songs.find((s) => s.곡코드 === key) ?? data.songs.find((s) => s.표시명 === key) ?? null
   }, [data.songs, songCode])
 
   if (loading && !data.songs.length) return <Spinner />
