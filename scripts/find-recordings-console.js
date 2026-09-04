@@ -19,6 +19,11 @@
   const total = TO - FROM + 1
   let done = 0
 
+  // 0건으로 끝났을 때 원인을 알 수 있게 세어 둔다.
+  // (예전 판은 실패를 전부 삼켜서, 못 찾은 이유를 알 방법이 없었다.)
+  const stat = { ok: 0, http: 0, error: 0, noMeta: 0, otherPerformer: 0 }
+  let sample = null
+
   const decode = (buf, headerCharset) => {
     const peek = new TextDecoder('latin1').decode(buf.slice(0, 2048))
     const declared = (peek.match(/charset\s*=\s*["']?\s*([\w-]+)/i) || [])[1]
@@ -37,16 +42,22 @@
       `/main/sub.html?page=1&num=${num}&pageCode=18&category=&srcYear=&keyfield=&key=&Mode=view&vodType=7`
     try {
       const res = await fetch(path)
+      if (!res.ok) { stat.http++; done++; if (num > FROM) await new Promise((r) => setTimeout(r, DELAY)); continue }
+      stat.ok++
       const headerCharset = (((res.headers.get('content-type') || '').match(/charset=([\w-]+)/i)) || [])[1]
       const html = decode(await res.arrayBuffer(), headerCharset)
       const text = html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 
       // "공연명 | YYYY.MM.DD" 를 찾는다
       const meta = text.match(/([가-힣A-Za-z0-9 ()&·.-]{2,40}?)\s*\|\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/)
-      if (!meta) continue
+      if (!meta) {
+        stat.noMeta++
+        if (!sample && text.length > 40) sample = { num, text: text.slice(0, 500) }
+        continue
+      }
 
       const 공연 = meta[1].trim()
-      if (PERFORMER && !공연.includes(PERFORMER)) continue
+      if (PERFORMER && !공연.includes(PERFORMER)) { stat.otherPerformer++; continue }
 
       const 날짜 = `${meta[2]}-${String(meta[3]).padStart(2, '0')}-${String(meta[4]).padStart(2, '0')}`
       const before = text.slice(0, meta.index)
@@ -56,7 +67,7 @@
       found.push({ num, 날짜, 제목, 공연, url: location.origin + path })
       console.log('✔', num, 날짜, 제목)
     } catch (e) {
-      /* 없는 글이거나 일시적 오류 — 건너뛴다 */
+      stat.error++
     }
 
     done++
@@ -65,6 +76,25 @@
   }
 
   found.sort((a, b) => a.날짜.localeCompare(b.날짜))
+
+  console.log(
+    `\n응답 성공 ${stat.ok} · HTTP 오류 ${stat.http} · 요청 실패 ${stat.error}` +
+      ` · 형식 못 읽음 ${stat.noMeta} · 다른 공연 ${stat.otherPerformer}`
+  )
+
+  if (!found.length) {
+    console.warn('한 건도 찾지 못했습니다. 아래를 알려주시면 파싱 규칙을 고치겠습니다.')
+    if (sample) {
+      console.log(`\n--- 내용은 있는데 형식을 못 읽은 페이지 (num=${sample.num}) 앞 500자 ---`)
+      console.log(sample.text)
+    } else if (stat.ok === 0) {
+      console.log('요청 자체가 실패했습니다. 위 오류 수치를 알려주세요.')
+    } else {
+      console.log('응답은 왔지만 읽을 내용이 없습니다. scripts/diagnose-board.js 를 돌려주세요.')
+    }
+    return found
+  }
+
   console.table(found)
 
   const tsv = found.map((f) => `${f.날짜}\t${f.제목}\t${f.url}`).join('\n')
