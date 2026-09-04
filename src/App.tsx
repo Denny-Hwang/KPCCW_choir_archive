@@ -34,7 +34,22 @@ function Chrome() {
           <h1 className="min-w-0 truncate text-base font-extrabold tracking-tight sm:text-lg">
             {data.config.앱_제목}
           </h1>
-          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+          <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+            {data.config.교회홈페이지 && (
+              <a
+                href={data.config.교회홈페이지}
+                target="_blank"
+                rel="noreferrer noopener"
+                title="교회 홈페이지"
+                aria-label="교회 홈페이지 열기"
+                className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 fill-current">
+                  <path d="M12 3 2 11h3v9h5v-6h4v6h5v-9h3L12 3Z" />
+                </svg>
+                교회
+              </a>
+            )}
             <button type="button" onClick={reload} className="text-xs text-stone-400 hover:text-stone-600">
               {loading ? '새로고침 중…' : '새로고침'}
             </button>
