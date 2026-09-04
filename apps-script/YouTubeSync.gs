@@ -164,6 +164,7 @@ function resolveChannelId_(ss) {
   var handle = normalizeHandle_(readConfigValue_(ss, '유튜브채널핸들')) || DEFAULT_CHANNEL_HANDLE;
   var reason = '';
 
+  // 1순위: API의 핸들 조회.
   try {
     var byHandle = YouTube.Channels.list('id', { forHandle: handle });
     if (byHandle.items && byHandle.items.length) {
@@ -175,6 +176,15 @@ function resolveChannelId_(ss) {
   } catch (err) {
     // 실패 사유를 삼키지 않는다. 권한 문제인지 핸들 문제인지 여기서만 알 수 있다.
     reason = String(err && err.message ? err.message : err);
+  }
+
+  // 2순위: 채널 페이지의 HTML에서 직접 읽는다.
+  // forHandle은 고급 서비스 버전에 따라 없을 수 있는데, 채널 ID는 페이지에 그대로 들어 있다.
+  // API 할당량도 들지 않고, 사람이 소스를 뒤질 일도 없어진다.
+  var scraped = channelIdFromPage_(handle);
+  if (scraped) {
+    props.setProperty('CHANNEL_ID', scraped);
+    return scraped;
   }
 
   var ui = SpreadsheetApp.getUi();
@@ -194,14 +204,52 @@ function resolveChannelId_(ss) {
     throw new Error('채널 ID 입력을 취소했습니다.');
   }
 
-  var typed = extractChannelId_(answer.getResponseText());
+  var raw = String(answer.getResponseText() || '').trim();
+  var typed = extractChannelId_(raw);
+
+  // 핸들이나 @주소를 넣었다면 그 핸들로 페이지를 다시 읽어 본다.
   if (!typed) {
-    throw new Error('채널 ID를 알아보지 못했습니다. UC로 시작하는 24자여야 합니다. 입력값: ' +
-      String(answer.getResponseText() || '').trim());
+    var typedHandle = normalizeHandle_(raw);
+    if (typedHandle) typed = channelIdFromPage_(typedHandle);
+  }
+
+  if (!typed) {
+    throw new Error('채널 ID를 알아보지 못했습니다. UC로 시작하는 24자를 넣어 주세요. 입력값: ' + raw);
   }
 
   props.setProperty('CHANNEL_ID', typed);
   return typed;
+}
+
+/**
+ * 채널 페이지 HTML에서 채널 ID를 읽는다.
+ *
+ * 페이지 어디에나 있는 `UC…`를 아무거나 집으면 관련 채널의 것을 잡을 수 있으므로,
+ * 그 채널 자신을 가리키는 자리만 순서대로 본다.
+ */
+function channelIdFromPage_(handle) {
+  var patterns = [
+    /"externalId"\s*:\s*"(UC[A-Za-z0-9_-]{22})"/,
+    /channel_id=(UC[A-Za-z0-9_-]{22})/,
+    /rel="canonical"[^>]*\/channel\/(UC[A-Za-z0-9_-]{22})/,
+    /itemprop="identifier"[^>]*content="(UC[A-Za-z0-9_-]{22})"/
+  ];
+
+  try {
+    var res = UrlFetchApp.fetch('https://www.youtube.com/@' + encodeURIComponent(handle), {
+      muteHttpExceptions: true,
+      followRedirects: true
+    });
+    if (res.getResponseCode() !== 200) return '';
+    var html = res.getContentText();
+    for (var i = 0; i < patterns.length; i++) {
+      var m = html.match(patterns[i]);
+      if (m) return m[1];
+    }
+  } catch (e) {
+    // 네트워크 실패나 권한 부족. 아래에서 사람에게 묻는다.
+  }
+  return '';
 }
 
 /**
