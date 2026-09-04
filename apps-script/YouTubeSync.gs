@@ -307,6 +307,36 @@ function getCacheSheet_(ss) {
   return sheet;
 }
 
+/**
+ * yt_cache를 빠르게 읽는다.
+ *
+ * 공용 readSheet_는 셀마다 형식을 정규화하는데, 캐시는 1만 행이 넘어서
+ * 7만 번의 셀 처리가 된다. 여기 값은 이미 문자열이고 필요한 열도 셋뿐이라
+ * 한 번에 읽어 그대로 쓴다. 악보집 등록이 권마다 몇 초씩 걸리던 원인이었다.
+ */
+function readCacheRows_(ss) {
+  var sheet = ss.getSheetByName('yt_cache');
+  if (!sheet) return [];
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+
+  var values = sheet.getRange(1, 1, last, CACHE_HEADERS.length).getValues();
+  var idx = {};
+  for (var h = 0; h < values[0].length; h++) idx[String(values[0][h]).trim()] = h;
+
+  var out = [];
+  for (var r = 1; r < values.length; r++) {
+    var videoId = values[r][idx['videoId']];
+    if (!videoId) continue;
+    out.push({
+      videoId: String(videoId),
+      제목: String(values[r][idx['제목']] || ''),
+      재생목록명: String(values[r][idx['재생목록명']] || '')
+    });
+  }
+  return out;
+}
+
 /** 이미 캐시에 있는 videoId|playlistId 조합. */
 function loadSeenKeys_(sheet) {
   var seen = {};
@@ -369,7 +399,7 @@ function matchVideos() {
   var ss = getSpreadsheet_();
   var tz = ss.getSpreadsheetTimeZone();
 
-  var cache = readSheet_(ss, 'yt_cache', tz);
+  var cache = readCacheRows_(ss);
   if (!cache.length) {
     ui.alert('yt_cache가 비어 있습니다. 먼저 "채널 동기화"를 실행하세요.');
     return;
@@ -561,6 +591,59 @@ function readConfigValue_(ss, key) {
 }
 
 /**
+ * 보유 악보집 일괄 등록 — 메뉴: 성가 아카이브 > 악보집 일괄 등록
+ *
+ * 권마다 따로 누르면 그때마다 캐시 1만여 행을 다시 읽고, 채널에 없는 권에서는
+ * 목차 붙여넣기 대화상자가 떠서 흐름이 끊긴다. 캐시를 한 번만 읽고
+ * books의 보유 권을 전부 처리한 뒤, 채널에 없던 권을 모아서 알려준다.
+ */
+function registerOwnedBooks() {
+  var ui = SpreadsheetApp.getUi();
+  var ss = getSpreadsheet_();
+  var books = readSheet_(ss, 'books', ss.getSpreadsheetTimeZone());
+
+  var owned = [];
+  for (var b = 0; b < books.length; b++) {
+    var code = String(books[b]['집코드'] || '').trim();
+    if (code && toBool_(books[b]['보유'])) owned.push(code);
+  }
+  if (!owned.length) {
+    ui.alert('books 시트에 보유(TRUE)로 표시된 악보집이 없습니다.');
+    return;
+  }
+
+  var cache = readCacheRows_(ss);
+  if (!cache.length) {
+    ui.alert('yt_cache가 비어 있습니다. 먼저 [채널 동기화]를 실행하세요.');
+    return;
+  }
+
+  var added = [];
+  var missing = [];
+  for (var i = 0; i < owned.length; i++) {
+    var entries = songsFromCache_(cache, owned[i]);
+    if (!entries.length) {
+      missing.push(owned[i]);
+      continue;
+    }
+    var n = appendSongs_(ss, owned[i], entries);
+    added.push(owned[i] + ' ' + n + '곡' + (n < entries.length ? ' (이미 있던 ' + (entries.length - n) + '곡 제외)' : ''));
+  }
+
+  ui.alert(
+    '악보집 일괄 등록 완료',
+    (added.length ? '추가됨\n  ' + added.join('\n  ') + '\n\n' : '새로 추가된 곡이 없습니다.\n\n') +
+      (missing.length
+        ? '채널에 재생목록이 없는 권: ' + missing.join(', ') + '\n' +
+          '이 권들은 [악보집 등록]으로 목차를 붙여넣거나, 선곡할 때마다 한 곡씩 넣으면 됩니다.\n\n'
+        : '') +
+      '전부 상태=후보, 검증=FALSE로 들어갔습니다.\n' +
+      '이어서 [영상 매칭]을 실행하면 파트 영상이 채워집니다.',
+    ui.ButtonSet.OK
+  );
+}
+
+/**
  * 신규 악보집 등록 (§9.4).
  * 채널 재생목록에서 수록곡을 찾고, 없으면 목차 붙여넣기로 폴백한다.
  */
@@ -579,7 +662,7 @@ function registerBookPrompt() {
   var bookCode = '중' + volume;
   ensureBookRow_(ss, bookCode, volume);
 
-  var entries = songsFromCache_(ss, bookCode);
+  var entries = songsFromCache_(readCacheRows_(ss), bookCode);
   if (!entries.length) {
     var pasted = ui.prompt(
       '수록곡 목록',
@@ -623,12 +706,13 @@ function ensureBookRow_(ss, bookCode, volume) {
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
 }
 
-function songsFromCache_(ss, bookCode) {
-  var cache = readSheet_(ss, 'yt_cache', ss.getSpreadsheetTimeZone());
+function songsFromCache_(cache, bookCode) {
   var found = {};
   for (var i = 0; i < cache.length; i++) {
-    if (parsePlaylistBook_(cache[i]['재생목록명']) !== bookCode) continue;
     var parsed = parseVideoTitle_(cache[i]['제목']);
+    // 재생목록명이 1순위, 제목 안의 집 이름이 2순위.
+    var entryBook = parsePlaylistBook_(cache[i]['재생목록명']) || parsed.bookCode;
+    if (entryBook !== bookCode) continue;
     if (!parsed.number || !parsed.title) continue;
     if (!found[parsed.number]) found[parsed.number] = parsed.title;
   }
