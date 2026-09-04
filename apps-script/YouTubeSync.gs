@@ -394,27 +394,23 @@ function matchVideos() {
     seen[String(links[l]['표시명']) + '|' + String(links[l]['파트'])] = true;
   }
 
-  var toAppend = [];
+  // 후보를 먼저 모은 뒤, 같은 (곡, 파트)에서 실연을 MIDI보다 우선한다.
+  // 41집 이후는 같은 곡이 두 벌로 올라오는데, 연습에는 실연 녹음이 낫다.
+  var candidates = {};
   var failures = [];
+  var midiOnly = 0;
 
   for (var c = 0; c < cache.length; c++) {
     var entry = cache[c];
-    var bookCode = parsePlaylistBook_(entry['재생목록명']);
     var parsed = parseVideoTitle_(entry['제목']);
+    // 재생목록명이 1순위, 제목 안의 집 이름이 2순위.
+    var bookCode = parsePlaylistBook_(entry['재생목록명']) || parsed.bookCode;
 
-    if (!bookCode || !parsed.part) {
-      failures.push(entry['재생목록명'] + ' / ' + entry['제목']);
-      continue;
-    }
+    if (!bookCode) continue; // 중앙성가 집이 아닌 영상. 실패로 세지 않는다.
 
-    // 1순위: 집번호 + 곡번호. 2순위: 집번호 + 곡명 정규화.
     var display = null;
-    if (parsed.number) {
-      display = byCode[bookCode + '-' + padNumber_(parsed.number)] || null;
-    }
-    if (!display && parsed.title) {
-      display = byBookAndTitle[bookCode + '|' + normalizeTitle_(parsed.title)] || null;
-    }
+    if (parsed.number) display = byCode[bookCode + '-' + padNumber_(parsed.number)] || null;
+    if (!display && parsed.title) display = byBookAndTitle[bookCode + '|' + normalizeTitle_(parsed.title)] || null;
 
     if (!display) {
       failures.push(entry['재생목록명'] + ' / ' + entry['제목']);
@@ -422,10 +418,19 @@ function matchVideos() {
     }
 
     var key = display + '|' + parsed.part;
-    if (seen[key]) continue; // 중복은 skip. 기존 행을 건드리지 않는다.
-    seen[key] = true;
+    if (seen[key]) continue; // 이미 시트에 있는 조합은 건드리지 않는다 (§9.3 append only).
 
-    toAppend.push([display, parsed.part, 'https://youtu.be/' + entry['videoId'], '', '', 'youtube_channel', false]);
+    var prev = candidates[key];
+    if (!prev || (prev.isMidi && !parsed.isMidi)) {
+      candidates[key] = { display: display, part: parsed.part, videoId: entry['videoId'], isMidi: parsed.isMidi };
+    }
+  }
+
+  var toAppend = [];
+  for (var k in candidates) {
+    var v = candidates[k];
+    if (v.isMidi) midiOnly++;
+    toAppend.push([v.display, v.part, 'https://youtu.be/' + v.videoId, '', '', 'youtube_channel', false]);
   }
 
   if (toAppend.length) {
@@ -437,62 +442,87 @@ function matchVideos() {
 
   ui.alert(
     '영상 매칭 완료',
-    '추가 ' + toAppend.length + '개 (전부 검증 대기)\n매칭 실패 ' + failures.length + '건\n\n' +
-      (failures.length ? '_매칭실패 시트에 실패 목록을 적었습니다. ' : '') +
+    '추가 ' + toAppend.length + '개 (전부 검증 대기)\n' +
+      (midiOnly ? '그중 ' + midiOnly + '개는 실연이 없어 MIDI를 썼습니다.\n' : '') +
+      '매칭 실패 ' + failures.length + '건\n\n' +
+      (failures.length ? '_매칭실패 시트에 실패 목록을 적었습니다.\n' : '') +
       '추가된 링크는 사람이 재생을 확인해 검증 열을 체크하기 전까지 공지에 나가지 않습니다.',
     ui.ButtonSet.OK
   );
 }
 
-/** "[중앙아트] 중앙성가 41집" → "중41". 시리즈가 늘어나면 여기에 규칙을 추가한다. */
+/**
+ * 재생목록명 → 집코드.
+ * 실제 이름은 "[중앙아트] 중앙성가 52집", "[합창 듣기] 중앙성가 40집"처럼 앞머리 태그가 다양하다.
+ */
 function parsePlaylistBook_(playlistName) {
-  var name = String(playlistName || '');
-  var m = name.match(/중앙성가\s*(\d+)\s*집/);
-  if (m) return '중' + parseInt(m[1], 10);
+  var m = String(playlistName || '').match(/중앙성가\s*(\d+)\s*집/);
+  return m ? '중' + parseInt(m[1], 10) : null;
+}
+
+var PART_PATTERNS = [
+  [/소프라노|sop(rano)?/i, '소프라노'],
+  [/알토|alto/i, '알토'],
+  [/테너|tenor/i, '테너'],
+  [/베이스|바리톤|bass|baritone/i, '베이스'],
+  [/반주|피아노|accomp|\bMR\b/i, '반주'],
+  [/합창|전곡|전체|full|tutti/i, '합창']
+];
+
+function matchPart_(text) {
+  for (var i = 0; i < PART_PATTERNS.length; i++) {
+    if (PART_PATTERNS[i][0].test(text)) return PART_PATTERNS[i][1];
+  }
   return null;
 }
 
 /**
- * 영상 제목에서 곡번호·곡명·파트를 뽑는다.
+ * 영상 제목에서 곡번호·곡명·파트를 뽑는다. 실제 채널의 형식은 이렇다.
  *
- * ※ 이 규칙은 잠정이다. 실제 채널의 제목 형식은 미러링을 한 번 돌려 yt_cache를
- *   눈으로 확인한 뒤에 확정해야 한다 (§11 미결정). 규칙을 고치고 "영상 매칭"을
- *   다시 실행하면 되고, API 할당량은 들지 않는다.
+ *   [중앙아트] 중앙성가 52집｜31. 하나님은 영이시니 (입례송) – 소프라노
+ *   [중앙아트] 중앙성가 40집 32. 기도송 - 합창
+ *   [중앙아트] ‘하나님의 시선 9집’ 13. 어버이의 사랑 – 소프라노 MIDI
+ *
+ * 집 이름과 곡번호 사이 구분자가 전각 ｜이기도 하고 공백이기도 하며,
+ * 집 이름이 따옴표에 싸이기도 한다. 곡명에는 괄호와 &가 들어간다.
+ * 41집 이후는 같은 곡이 MIDI와 실연 두 벌로 올라오므로 구분해 둔다.
  */
 function parseVideoTitle_(rawTitle) {
-  var title = String(rawTitle || '');
+  var cleaned = String(rawTitle || '').replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
 
+  var isMidi = /\bMIDI\b/i.test(cleaned);
+  cleaned = cleaned.replace(/\bMIDI\b/gi, '').replace(/\s+/g, ' ').trim();
+
+  // 집 번호는 뒤에 '집'이 붙으므로, 점이 따라오는 첫 숫자가 곡번호다.
+  var numMatch = cleaned.match(/(\d{1,3})\s*\.\s*(.+)$/);
+  var number = numMatch ? parseInt(numMatch[1], 10) : null;
+  var rest = numMatch ? numMatch[2].trim() : cleaned;
+
+  // 파트는 맨 뒤 구분자 뒤에 온다. 뒤쪽이 실제 파트 이름일 때만 잘라낸다.
+  // (곡명 자체에 하이픈이 들어가도 잘리지 않게 하기 위해서다.)
   var part = null;
-  var PART_PATTERNS = [
-    [/(소프라노|sop|soprano)/i, '소프라노'],
-    [/(알토|alt|alto)/i, '알토'],
-    [/(테너|ten|tenor)/i, '테너'],
-    [/(베이스|바리톤|bass)/i, '베이스'],
-    [/(반주|피아노|accomp|mr)/i, '반주'],
-    [/(합창|전체|full|tutti)/i, '합창']
-  ];
-  for (var i = 0; i < PART_PATTERNS.length; i++) {
-    if (PART_PATTERNS[i][0].test(title)) { part = PART_PATTERNS[i][1]; break; }
+  var title = rest;
+  var sep = rest.match(/^(.*?)\s*[–—\-|｜]\s*([^–—\-|｜]{1,24})\s*$/);
+  if (sep) {
+    var mapped = matchPart_(sep[2]);
+    if (mapped) {
+      part = mapped;
+      title = sep[1].trim();
+    }
   }
-  // 파트 표기가 전혀 없으면 합창(전곡) 영상으로 본다.
-  if (!part) part = '합창';
+  if (!part) part = matchPart_(rest) || '합창';
 
-  // 대괄호·소괄호 안 채널 태그 제거 후 곡번호를 찾는다.
-  var cleaned = title.replace(/\[[^\]]*\]/g, ' ').replace(/\([^)]*\)/g, ' ').trim();
-  var numberMatch = cleaned.match(/(?:^|\s)(\d{1,2})\s*[.\-번]\s*/);
-  var number = numberMatch ? parseInt(numberMatch[1], 10) : null;
+  // 제목 안에도 집 이름이 들어 있다. 재생목록명이 애매할 때 쓴다.
+  var head = numMatch ? cleaned.slice(0, numMatch.index) : '';
+  var bookMatch = head.match(/중앙성가\s*(\d+)\s*집/);
 
-  var songTitle = cleaned
-    .replace(/중앙성가\s*\d+\s*집/g, ' ')
-    .replace(/(?:^|\s)\d{1,2}\s*[.\-번]\s*/, ' ')
-    .replace(/(소프라노|알토|테너|베이스|바리톤|합창|반주|피아노|전체|soprano|alto|tenor|bass|mr)/gi, ' ')
-    // 제목 뒤에 흔히 붙는 안내 문구. 남겨두면 2순위 곡명 매칭이 헛돈다.
-    .replace(/(파트\s*연습|파트|연습|음원|영상|풀버전|full)/gi, ' ')
-    .replace(/[\s\-—–·]+$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return { number: number, title: songTitle, part: part };
+  return {
+    number: number,
+    title: title.replace(/^[\u2018\u2019\u201C\u201D'"]+|[\u2018\u2019\u201C\u201D'"]+$/g, '').trim(),
+    part: part,
+    isMidi: isMidi,
+    bookCode: bookMatch ? '중' + parseInt(bookMatch[1], 10) : null
+  };
 }
 
 /** 제목 정규화 (§9.4). 매칭 전 양쪽에 동일하게 적용한다. */
