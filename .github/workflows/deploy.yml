@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+# main 푸시 시 빌드 후 Pages에 배포한다. 빌드 산출물은 커밋하지 않는다 (§13.4).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포 중 새 푸시가 오면 진행 중인 것을 취소하지 않고 큐에 넣는다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: 테스트
+        run: npm test
+
+      - name: 빌드
+        run: npm run build
+        env:
+          # 저장소명이 base path가 된다 (§13.1). 커스텀 도메인을 붙이면 '/'로 바꾼다.
+          BASE_PATH: /${{ github.event.repository.name }}/
+          # 읽기 전용 URL이라 저장소 변수로 두어도 된다 (§13.3).
+          # 데이터에 개인정보가 없고, 앱을 여는 사람의 브라우저에 어차피 노출된다.
+          # 비워 두면 앱은 예시 데이터를 보여주고, 설정 화면에서 직접 넣을 수 있다.
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
