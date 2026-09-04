@@ -96,6 +96,10 @@ export interface AppConfig {
   공지_빈줄구분: boolean
   공지_파트순서: Part[]
   앱_제목: string
+  /** 교회 홈페이지. 비어 있으면 링크를 그리지 않는다. */
+  교회홈페이지: string
+  /** 예배 실황 영상이 올라오는 페이지. services.기록영상URL이 빈 날에 대신 안내한다. */
+  예배영상URL: string
   /** 시트의 IANA 시간대. 날짜·시각 해석의 기준 (기본 America/Los_Angeles). */
   시간대: string
   유튜브채널핸들: string

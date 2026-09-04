@@ -91,3 +91,35 @@ export function Spinner({ label = '불러오는 중' }: { label?: string }) {
     </div>
   )
 }
+
+/**
+ * 예배 실황 영상 링크 (§4.3 기록영상URL, §11의 "유튜브가 아닌 경우" 항목).
+ *
+ * 그 날의 기록영상이 있으면 그것을 쓰고, 없으면 교회 홈페이지의 예배 영상 페이지로 보낸다.
+ * 유튜브가 아닌 주소도 그대로 링크한다 — 교회 홈페이지에 올라오는 것이 원래 형태다.
+ */
+export function RecordingLink({
+  recordingUrl,
+  fallbackUrl,
+  className = '',
+}: {
+  recordingUrl?: string
+  fallbackUrl?: string
+  className?: string
+}) {
+  const own = (recordingUrl ?? '').trim()
+  const site = (fallbackUrl ?? '').trim()
+  const href = own || site
+  if (!href) return null
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={`inline-flex items-center gap-1 underline decoration-stone-300 underline-offset-2 hover:text-stone-700 ${className}`}
+    >
+      {own ? '기록영상 보기' : '교회 홈페이지에서 예배 영상 보기'}
+    </a>
+  )
+}

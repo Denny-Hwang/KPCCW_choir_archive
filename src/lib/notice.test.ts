@@ -208,6 +208,19 @@ describe('buildNotice — 2곡 이상 (§7.1 분기)', () => {
   })
 })
 
+describe('연습 일정이 없을 때', () => {
+  it('연습 헤더를 통째로 생략한다', () => {
+    const output = buildNotice({
+      service: { 찬양일: '2026-08-23', 예배구분: '주일' },
+      rehearsals: [],
+      songs: [{ 표시명: 'x', 제목: 'x', links: [link('합창', 'https://youtu.be/vk1nDmhdy2w')] }],
+      config: DEFAULT_CONFIG,
+    })
+    expect(output).not.toContain('성가연습 일정')
+    expect(output).toBe(['8월 23일 주일 찬양', '', '(합창)', 'https://youtu.be/vk1nDmhdy2w'].join('\n'))
+  })
+})
+
 describe('공지_빈줄구분', () => {
   it('파트 블록 사이에도 빈 줄이 들어간다', () => {
     const output = buildNotice({

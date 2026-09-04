@@ -4,7 +4,7 @@ import { buildNotice, noticeWarnings } from '../lib/notice'
 import { buildServiceView, pickFeaturedService, totalAttendance } from '../lib/derive'
 import { formatKoreanTime, formatLongDate, formatMonthDay, todayKey } from '../lib/date'
 import { PartLinks } from '../components/PartLinks'
-import { CopyBlock, Empty, Section, Spinner } from '../components/ui'
+import { CopyBlock, Empty, RecordingLink, Section, Spinner } from '../components/ui'
 
 /**
  * 홈 — 다가오는 찬양일 (§6.1).
@@ -94,6 +94,12 @@ export default function Home() {
               {view.total}명
             </p>
           )}
+
+          <RecordingLink
+            recordingUrl={featured.기록영상URL}
+            fallbackUrl={data.config.예배영상URL}
+            className="text-xs text-stone-500"
+          />
         </div>
       </div>
 

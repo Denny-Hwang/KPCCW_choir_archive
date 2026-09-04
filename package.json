@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify": "node scripts/run.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

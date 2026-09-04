@@ -160,6 +160,6 @@ describe('parsePayload', () => {
   it('payload가 null이어도 빈 데이터를 낸다', () => {
     const data = parsePayload(null)
     expect(data.songs).toEqual([])
-    expect(data.config.앱_제목).toBe('성가대 아카이브')
+    expect(data.config.앱_제목).toBe('중부워싱턴한인장로교회 성가대')
   })
 })

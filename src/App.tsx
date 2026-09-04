@@ -26,9 +26,12 @@ function Chrome() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col">
       <header className="sticky top-0 z-20 border-b border-stone-200 bg-paper/95 backdrop-blur">
-        <div className="flex items-center justify-between px-4 pb-2 pt-3">
-          <h1 className="text-lg font-extrabold tracking-tight">{data.config.앱_제목}</h1>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
+          {/* 교회 이름이 길어 버튼을 밀어낼 수 있다. 제목은 줄이고 버튼은 줄바꿈하지 않는다. */}
+          <h1 className="min-w-0 truncate text-base font-extrabold tracking-tight sm:text-lg">
+            {data.config.앱_제목}
+          </h1>
+          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             <button type="button" onClick={reload} className="text-xs text-stone-400 hover:text-stone-600">
               {loading ? '새로고침 중…' : '새로고침'}
             </button>
@@ -74,8 +77,20 @@ function Chrome() {
         </Routes>
       </main>
 
-      <footer className="px-4 pb-6 pt-2 text-center text-[11px] text-stone-400">
-        편집은 구글 시트에서 합니다. 이 앱은 시트를 읽어 보여줍니다.
+      <footer className="space-y-1 px-4 pb-6 pt-2 text-center text-[11px] text-stone-400">
+        {data.config.교회홈페이지 && (
+          <p>
+            <a
+              href={data.config.교회홈페이지}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline decoration-stone-300 underline-offset-2 hover:text-stone-600"
+            >
+              중부워싱턴한인장로교회 (KPCCW)
+            </a>
+          </p>
+        )}
+        <p>편집은 구글 시트에서 합니다. 이 앱은 시트를 읽어 보여줍니다.</p>
       </footer>
     </div>
   )

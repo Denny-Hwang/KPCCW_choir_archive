@@ -88,10 +88,13 @@ export function buildNotice(input: NoticeInput): string {
     lines.push(songs[0].제목)
   }
 
-  gap()
-  lines.push(config.공지_연습헤더)
-  for (const rehearsal of [...rehearsals].sort((a, b) => a.연습일.localeCompare(b.연습일))) {
-    lines.push(formatRehearsalLine(rehearsal))
+  // 연습 일정이 없으면 헤더도 내보내지 않는다. 빈 헤더만 남으면 읽는 사람이
+  // 일정이 누락된 것인지 원래 없는 것인지 알 수 없다.
+  const sorted = [...rehearsals].sort((a, b) => a.연습일.localeCompare(b.연습일))
+  if (sorted.length) {
+    gap()
+    lines.push(config.공지_연습헤더)
+    for (const rehearsal of sorted) lines.push(formatRehearsalLine(rehearsal))
   }
 
   if (multi) {

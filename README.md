@@ -1,7 +1,7 @@
-# 성가대 아카이브
+# 중부워싱턴한인장로교회 성가대 아카이브
 
-Google Sheets를 DB로, GitHub Pages를 호스팅으로 쓰는 성가대 곡 아카이브 / 연습 링크 공유 앱.
-서버 비용 0.
+[중부워싱턴한인장로교회(KPCCW)](https://www.kpccw.org/) 성가대의 곡 아카이브 / 연습 링크 공유 앱.
+Google Sheets를 DB로, GitHub Pages를 호스팅으로 쓴다. 서버 비용 0.
 
 ```
 Google Sheets (7 데이터 시트 + N개 연도 뷰 탭)
@@ -155,6 +155,9 @@ https://youtu.be/9yT6gnaWd6s
 | `중복경고개월` | `12` | 선곡 화면의 붉은 배지 기준 |
 | `연습기본패턴` | `주일 13:30, 수요일 20:00` | 선곡 시 연습일 자동 제안 |
 | `절기힌트` | `1:일반, 3:사순, ...` | 월 → 절기 제안 |
+| `앱_제목` | `중부워싱턴한인장로교회 성가대` | 화면 상단 제목 |
+| `교회홈페이지` | `https://www.kpccw.org/` | 화면 하단 링크 |
+| `예배영상URL` | `https://www.kpccw.org/` | 예배 실황 영상 페이지. 그 날의 `기록영상URL`이 비면 이 링크를 안내한다 |
 | `시간대` | `America/Los_Angeles` | 날짜·시각 해석 기준. 시트 설정과 같게 맞출 것 |
 | `유튜브채널ID` | (비어 있음) | 채널 ID를 넣어 두면 핸들 조회를 건너뛴다 |
 | `데이터시트목록` | `books,songs,...` | JSON으로 내보낼 시트. 연도 뷰 탭은 제외된다 |
@@ -164,9 +167,19 @@ https://youtu.be/9yT6gnaWd6s
 ```bash
 npm install
 npm run dev      # 개발 서버
-npm test         # 66개 테스트 (공지 포맷·URL 정규화·중복 판정)
+npm test         # 75개 테스트 (공지 포맷·URL 정규화·중복 판정)
 npm run lint     # 타입 검사
 npm run build    # 프로덕션 빌드
+```
+
+### 시트가 앱에 제대로 도착했는지 확인하기
+
+Apps Script 엔드포인트가 내려준 JSON을 **앱과 같은 코드로** 읽어, 무엇이 어떻게 보일지 그대로 출력한다.
+행이 버려졌는지, 곡명 참조가 깨졌는지, 공지가 어떻게 나오는지를 한 번에 볼 수 있다.
+
+```bash
+npm run verify -- https://script.google.com/macros/s/.../exec
+npm run verify -- payload.json    # 브라우저에서 exec URL을 열어 저장한 JSON
 ```
 
 엔드포인트를 연결하지 않으면 `public/demo-data.json`의 예시 데이터로 동작하므로,
