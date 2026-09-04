@@ -257,15 +257,15 @@ npm run verify -- https://script.google.com/macros/s/.../exec
 시트 대비 버려진 행, 곡명 참조 오류, 주소 오류, 그리고 실제로 만들어질 공지를
 앱과 **같은 코드로** 출력합니다.
 
-교회 홈페이지에서 실황영상 주소를 모아 오려면:
+교회 홈페이지에서 실황영상 주소를 모아 오려면 — 게시판의 `num`은 다른 영상들과
+섞여 올라가며 붙은 일련번호라 계산할 수 없어, 범위를 훑어 제목으로 맞춰야 합니다.
 
-```bash
-node scripts/find-recordings.mjs --from 150 --to 390
-```
+- **브라우저에서** (설치 불필요): 게시판을 연 뒤 `F12` → Console에
+  [`scripts/find-recordings-console.js`](scripts/find-recordings-console.js)를 붙여넣습니다.
+  결과가 클립보드에 복사됩니다.
+- **내 PC에서**: `node scripts/find-recordings.mjs --from 150 --to 390`
 
-게시판의 `num`은 다른 영상들과 섞여 올라가며 붙은 일련번호라 계산할 수 없습니다.
-범위를 훑어 제목·공연·날짜를 읽고 **KPCCW 성가대** 것만 골라, `services` 시트의
-`기록영상URL`에 넣을 형태로 출력합니다.
+둘 다 **KPCCW 성가대** 항목만 골라 `services` 시트의 `기록영상URL`에 넣을 형태로 출력합니다.
 
 > `notice.ts`의 출력은 실제 카톡 공지 원문으로 테스트에 고정되어 있습니다.
 > 형식을 "개선"하는 변경은 전부 회귀입니다. 바꾸려면 `config` 시트를 통해야 합니다.
