@@ -370,10 +370,16 @@ function cacheReport() {
   for (var i = 0; i < rows.length; i++) {
     var name = rows[i]['재생목록명'] || '(이름 없음)';
     if (!byPlaylist[name]) {
-      byPlaylist[name] = { count: 0, book: parsePlaylistBook_(name) };
+      byPlaylist[name] = { count: 0, book: parsePlaylistBook_(name), parts: {}, noNumber: 0 };
       order.push(name);
     }
-    byPlaylist[name].count++;
+    var info = byPlaylist[name];
+    info.count++;
+    // 제목이 실제로 어떻게 읽히는지도 함께 센다. "추가했는데 왜 안 들어가지?"는
+    // 여기서 답이 나와야 한다 — 영상 매칭은 집을 모르는 영상을 조용히 건너뛴다.
+    var parsed = parseVideoTitle_(rows[i]['제목']);
+    info.parts[parsed.part] = (info.parts[parsed.part] || 0) + 1;
+    if (!parsed.number) info.noNumber++;
   }
 
   // 인식된 권 / 다른 시리즈 / 그 밖으로 나눈다.
@@ -381,13 +387,17 @@ function cacheReport() {
   // 이게 없으면 "왜 중2로 안 잡히지?"를 재생목록 이름만 보고는 알 수 없다.
   var recognized = 0;
   var otherSeries = 0;
+  var PART_COLUMNS = ['합창', '소프라노', '알토', '테너', '베이스', '반주'];
   var table = order.map(function (name) {
     var info = byPlaylist[name];
     var verdict;
     if (info.book) { verdict = '인식됨'; recognized++; }
     else if (/중앙성가\s*\d+\s*집/.test(name)) { verdict = '다른 시리즈 (본 중앙성가 아님)'; otherSeries++; }
     else verdict = '집 번호 없음';
-    return [info.book || '', name, info.count, verdict];
+    var row = [info.book || '', name, info.count, verdict];
+    PART_COLUMNS.forEach(function (part) { row.push(info.parts[part] || 0); });
+    row.push(info.noNumber);
+    return row;
   });
   table.sort(function (a, b) {
     if (a[0] && b[0]) return bookNumber_(a[0]) - bookNumber_(b[0]) || a[1].localeCompare(b[1]);
@@ -396,21 +406,37 @@ function cacheReport() {
     return a[3].localeCompare(b[3]) || a[1].localeCompare(b[1]);
   });
 
+  var headers = ['집코드', '재생목록명', '영상 수', '판정']
+    .concat(PART_COLUMNS)
+    .concat(['곡번호 없음']);
   var sheet = ss.getSheetByName('_재생목록') || ss.insertSheet('_재생목록');
   sheet.clear();
-  sheet.getRange(1, 1, 1, 4).setValues([['집코드', '재생목록명', '영상 수', '판정']]).setFontWeight('bold');
-  if (table.length) sheet.getRange(2, 1, table.length, 4).setValues(table);
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  if (table.length) sheet.getRange(2, 1, table.length, headers.length).setValues(table);
   sheet.setFrozenRows(1);
-  sheet.autoResizeColumns(1, 4);
+  sheet.autoResizeColumns(1, headers.length);
 
-  // 보유 권 가운데 캐시에 재생목록이 없는 것.
-  var have = {};
-  table.forEach(function (r) { if (r[0]) have[r[0]] = true; });
+  // 보유 권 단위 요약. 재생목록이 아예 없는 권과, 목록은 있는데
+  // 파트(소프라노~베이스) 영상이 하나도 없는 권을 나눠서 보여준다.
+  // "40집을 추가했는데 왜 파트가 안 들어가지?"는 이 두 줄이 답이다.
+  var VOICE_PARTS = ['소프라노', '알토', '테너', '베이스'];
+  var voiceByBook = {};
+  order.forEach(function (name) {
+    var info = byPlaylist[name];
+    if (!info.book) return;
+    var count = voiceByBook[info.book] || 0;
+    VOICE_PARTS.forEach(function (part) { count += info.parts[part] || 0; });
+    voiceByBook[info.book] = count;
+  });
+
   var missing = [];
+  var voiceless = [];
   var books = readSheet_(ss, 'books', ss.getSpreadsheetTimeZone());
   for (var b = 0; b < books.length; b++) {
     var code = String(books[b]['집코드'] || '').trim();
-    if (code && toBool_(books[b]['보유']) && !have[code]) missing.push(code);
+    if (!code || !toBool_(books[b]['보유'])) continue;
+    if (voiceByBook[code] === undefined) missing.push(code);
+    else if (!voiceByBook[code]) voiceless.push(code);
   }
 
   ui.alert(
@@ -418,12 +444,17 @@ function cacheReport() {
     '캐시 ' + rows.length + '행 · 재생목록 ' + table.length + '개\n' +
       '  인식됨 ' + recognized + '개 · 다른 시리즈 ' + otherSeries + '개 · 집 번호 없음 ' +
       (table.length - recognized - otherSeries) + '개\n\n' +
-      '전체 목록을 [_재생목록] 시트에 적었습니다. 거기서 찾으시는 권을 확인하세요.\n\n' +
+      '전체 목록을 [_재생목록] 시트에 적었습니다. 재생목록마다 파트 구성까지 나옵니다.\n\n' +
       (missing.length
-        ? '보유 권 중 캐시에 재생목록이 없는 것: ' + missing.join(', ') + '\n' +
-          '_재생목록 시트에서 이름이 다른 목록으로 들어 있지 않은지 보고,\n' +
-          '없으면 [재생목록 직접 추가]로 주소를 넣으세요.'
-        : '보유 권은 모두 재생목록을 찾았습니다.'),
+        ? '재생목록이 없는 보유 권: ' + missing.join(', ') + '\n'
+        : '') +
+      (voiceless.length
+        ? '재생목록은 있지만 파트(소프라노~베이스) 영상이 없는 보유 권: ' + voiceless.join(', ') + '\n'
+        : '') +
+      (missing.length || voiceless.length
+        ? '유튜브에서 그 권의 전 파트 재생목록을 찾아 [재생목록 직접 추가]에 넣으세요.\n' +
+          '넣었는데도 여기 남아 있다면, _재생목록 시트에서 그 목록의 이름과 판정을 확인하세요.'
+        : '보유 권 모두 파트 영상까지 캐시에 있습니다.'),
     ui.ButtonSet.OK
   );
 }
@@ -449,8 +480,9 @@ function addPlaylistPrompt() {
   var ui = SpreadsheetApp.getUi();
   var res = ui.prompt(
     '재생목록 직접 추가',
-    '유튜브 재생목록 주소나 ID를 붙여넣으세요. 여러 개면 줄바꿈으로 나눠 넣으면 됩니다.\n' +
-      '(watch?v=…&list=PL… 형태의 주소도 됩니다)',
+    '유튜브 재생목록 주소나 ID를 붙여넣으세요. 여러 개면 띄어쓰기로 나눠 한 줄에 넣으세요.\n' +
+      '(이 입력창은 한 줄짜리라, 여러 줄을 붙여넣으면 첫 줄만 들어올 수 있습니다.\n' +
+      ' watch?v=…&list=PL… 형태의 주소도 됩니다)',
     ui.ButtonSet.OK_CANCEL
   );
   if (res.getSelectedButton() !== ui.Button.OK) return;
@@ -479,7 +511,10 @@ function addPlaylistPrompt() {
 
   ui.alert(
     '재생목록 추가 완료',
-    lines.join('\n\n') + '\n\n이어서 [악보집 일괄 등록] → [영상 매칭]을 실행하세요.',
+    '입력에서 재생목록 ' + ids.length + '개를 알아봤습니다.\n' +
+      '(붙여넣은 주소 수와 다르면 입력창에서 잘린 것입니다 — 남은 것을 다시 넣으세요.)\n\n' +
+      lines.join('\n\n') +
+      '\n\n이어서 [악보집 일괄 등록] → [영상 매칭]을 실행하세요.',
     ui.ButtonSet.OK
   );
 }
@@ -519,13 +554,33 @@ function addOnePlaylist_(playlistId, sheet, seen, stamp) {
       sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CACHE_HEADERS.length).setValues(rows);
     }
 
+    // 방금 넣은 제목들이 실제로 어떻게 읽히는지 그 자리에서 보여준다.
+    // "추가는 됐는데 매칭이 안 되는" 상태를 다음 단계까지 끌고 가지 않기 위해서다.
     var book = parsePlaylistBook_(title);
+    var parts = {};
+    var noNumber = 0;
+    var bookless = 0;
+    rows.forEach(function (r) {
+      var parsed = parseVideoTitle_(r[1]);
+      parts[parsed.part] = (parts[parsed.part] || 0) + 1;
+      if (!parsed.number) noNumber++;
+      if (!book && !parsed.bookCode) bookless++;
+    });
+    var partSummary = Object.keys(parts)
+      .map(function (part) { return part + ' ' + parts[part]; })
+      .join(' · ');
+
     return '"' + title + '"  (채널: ' + owner + ')\n' +
-      '  신규 ' + rows.length + '행 추가.\n' +
+      (rows.length
+        ? '  신규 ' + rows.length + '행 추가' + (partSummary ? ' — ' + partSummary : '') + '.\n' +
+          (noNumber ? '  곡번호를 못 읽은 영상 ' + noNumber + '개 (매칭에서 제목으로 대조).\n' : '')
+        : '  신규 0행 — 이 목록은 이미 전부 캐시에 들어 있습니다.\n') +
       (book
         ? '  ' + book + '으로 인식됩니다.'
-        : '  ⚠ 이 이름에서는 집 번호를 읽을 수 없습니다. 영상 제목에 "중앙성가 NN집"이\n' +
-          '     들어 있으면 그것으로 인식되고, 아니면 매칭되지 않습니다.');
+        : bookless
+          ? '  ⚠ 재생목록 이름에서도, 영상 제목 ' + bookless + '개에서도 집 번호를 읽지 못했습니다.\n' +
+            '     이 영상들은 매칭에서 제외됩니다.'
+          : '  재생목록 이름에는 집 번호가 없지만 영상 제목으로 인식됩니다.');
   } catch (err) {
     return playlistId + '\n  ✗ ' + String(err && err.message ? err.message : err);
   }
