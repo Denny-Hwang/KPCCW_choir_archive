@@ -6,7 +6,7 @@ import { Badge, UnverifiedBadge } from './ui'
 
 /** 곡 한 줄. 라이브러리(§6.3)와 선곡 화면(§6.7)이 같은 표기를 쓴다. */
 export function SongMeta({ candidate }: { candidate: SongCandidate }) {
-  const { song, lastSung, recent, monthsAgo, verifiedLinkCount, hasParts } = candidate
+  const { song, lastSung, recent, monthsAgo, linkCount, verifiedLinkCount, hasParts } = candidate
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
       {song.집코드 && <Badge>{song.곡코드 || song.집코드}</Badge>}
@@ -25,6 +25,10 @@ export function SongMeta({ candidate }: { candidate: SongCandidate }) {
       )}
       {hasParts ? (
         <Badge tone="ok">파트 영상 {verifiedLinkCount}</Badge>
+      ) : linkCount > 0 ? (
+        // 자동 수집된 링크는 검증 전까지 공지에 안 나가지만, "없음"은 거짓말이다.
+        // 영상 매칭 직후 서가 전체가 "파트 영상 없음"으로 보이던 원인.
+        <Badge tone="warn">파트 영상 {linkCount} · 확인 대기</Badge>
       ) : (
         <Badge tone="warn">파트 영상 없음</Badge>
       )}

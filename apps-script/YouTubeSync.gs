@@ -596,6 +596,7 @@ function matchVideos() {
   var byCode = {};
   var byBookAndTitle = {};
   var booksWithSongs = {};
+  var bookOfDisplay = {};
   for (var s = 0; s < songs.length; s++) {
     var song = songs[s];
     var code = String(song['곡코드'] || '').trim();
@@ -606,13 +607,25 @@ function matchVideos() {
     if (bookCode) {
       byBookAndTitle[bookCode + '|' + normalizeTitle_(song['제목'])] = display;
       booksWithSongs[bookCode] = true;
+      bookOfDisplay[display] = bookCode;
     }
+  }
+
+  // 권별로 어떤 파트가 채워지는지 센다. "왜 이 권은 파트가 없지?"는
+  // 매칭이 끝난 자리에서 바로 답해야지, 캐시를 뒤져서 알아낼 일이 아니다.
+  var partsByBook = {};
+  function notePart_(display, part) {
+    var book = bookOfDisplay[display];
+    if (!book) return;
+    if (!partsByBook[book]) partsByBook[book] = {};
+    partsByBook[book][part] = true;
   }
 
   var links = readSheet_(ss, 'practice_links', tz);
   var seen = {};
   for (var l = 0; l < links.length; l++) {
     seen[String(links[l]['표시명']) + '|' + String(links[l]['파트'])] = true;
+    notePart_(String(links[l]['표시명']), String(links[l]['파트']));
   }
 
   // 후보를 먼저 모은 뒤, 같은 (곡, 파트)에서 실연을 MIDI보다 우선한다.
@@ -649,6 +662,8 @@ function matchVideos() {
     var key = display + '|' + parsed.part;
     if (seen[key]) continue; // 이미 시트에 있는 조합은 건드리지 않는다 (§9.3 append only).
 
+    notePart_(display, parsed.part);
+
     var prev = candidates[key];
     if (!prev || (prev.isMidi && !parsed.isMidi)) {
       candidates[key] = { display: display, part: parsed.part, videoId: entry['videoId'], isMidi: parsed.isMidi };
@@ -683,6 +698,17 @@ function matchVideos() {
   var notOwnedTotal = 0;
   notOwnedCodes.forEach(function (c) { notOwnedTotal += notOwned[c]; });
 
+  // 합창·반주뿐이고 소프라노~베이스가 하나도 없는 권. [합창 듣기] 목록만 캐시에
+  // 들어온 권이 정확히 이렇게 보인다 — 실제로 중39~41이 그랬다.
+  var VOICE_PARTS = ['소프라노', '알토', '테너', '베이스'];
+  var partless = [];
+  for (var pb in booksWithSongs) {
+    var have = partsByBook[pb] || {};
+    var hasVoice = VOICE_PARTS.some(function (part) { return have[part]; });
+    if (!hasVoice) partless.push(pb);
+  }
+  partless.sort(function (a, b) { return bookNumber_(a) - bookNumber_(b); });
+
   ui.alert(
     '영상 매칭 완료',
     '추가 ' + split.ok.length + '개 (전부 검증 대기)\n' +
@@ -694,6 +720,12 @@ function matchVideos() {
       (split.bad.length ? '시트가 거부한 행 ' + split.bad.length + '개 — ' + split.bad[0].reason + '\n' : '') +
       '\n' +
       (report.length + failures.length ? '_매칭실패 시트에 목록을 적었습니다.\n' : '') +
+      (partless.length
+        ? '\n⚠ 파트(소프라노~베이스) 영상이 없는 권: ' + partless.join(', ') + '\n' +
+          'yt_cache에 이 권들의 파트 영상 자체가 없습니다. [합창 듣기] 목록만 들어온 경우입니다.\n' +
+          '유튜브에서 "[중앙아트] 중앙성가 NN집" 재생목록을 찾아 [재생목록 직접 추가]에\n' +
+          '주소를 넣고, [영상 매칭]을 다시 실행하세요.\n\n'
+        : '') +
       '추가된 링크는 사람이 재생을 확인해 검증 열을 체크하기 전까지 공지에 나가지 않습니다.',
     ui.ButtonSet.OK
   );

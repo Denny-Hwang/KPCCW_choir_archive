@@ -103,6 +103,26 @@ describe('parseVideoTitle_', () => {
   it('파트 표시가 없으면 합창으로 본다', () => {
     expect(parseVideoTitle('[중앙아트] 중앙성가 39집 07. 사랑의 종소리').part).toBe('합창')
   })
+
+  it('실제 41집 재생목록의 제목 형식 (파트에 숫자가 붙는다)', () => {
+    // PLN_65EI7yT6qAoAMFvI7a4Bc9BwtjwGLd — 채널 동기화가 못 가져와 직접 추가하는 목록.
+    // 소프라노가 1·2로 갈라져 올라온다. 시트의 파트 드롭다운은 6개뿐이므로 둘 다
+    // 소프라노로 읽고, 매칭에서 (곡, 파트)당 첫 번째만 남는다.
+    const parts = [
+      ['[중앙아트] 중앙성가 41집 01. 지금은 엘리야 때처럼 - 합창', '합창'],
+      ['[중앙아트] 중앙성가 41집 01. 지금은 엘리야 때처럼 - 소프라노 1', '소프라노'],
+      ['[중앙아트] 중앙성가 41집 01. 지금은 엘리야 때처럼 - 소프라노 2', '소프라노'],
+      ['[중앙아트] 중앙성가 41집 01. 지금은 엘리야 때처럼 - 알토', '알토'],
+      ['[중앙아트] 중앙성가 41집 01. 지금은 엘리야 때처럼 - 테너', '테너'],
+    ] as const
+    for (const [title, part] of parts) {
+      const r = parseVideoTitle(title)
+      expect(r.number).toBe(1)
+      expect(r.title).toBe('지금은 엘리야 때처럼')
+      expect(r.part).toBe(part)
+      expect(r.bookCode).toBe('중41')
+    }
+  })
 })
 
 /** columnIndex_/getDataValidation만 쓰는 최소 시트 흉내. */
