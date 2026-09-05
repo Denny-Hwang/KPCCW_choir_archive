@@ -75,6 +75,18 @@ export function sundaysInMonth(year: number, month: number): string[] {
   return out
 }
 
+/**
+ * 그 달의 N번째 특정 요일. 0=일 … 6=토.
+ * 그 달에 N번째가 없으면(다섯째 주일이 없는 달 등) 마지막 것을 준다 — 빈손보다 낫다.
+ */
+export function nthWeekdayOfMonth(year: number, month: number, weekday: number, nth: number): string {
+  const first = new Date(year, month - 1, 1)
+  const lastDay = new Date(year, month, 0).getDate()
+  let day = 1 + ((weekday - first.getDay() + 7) % 7) + (Math.max(1, nth) - 1) * 7
+  while (day > lastDay) day -= 7
+  return todayKey(new Date(year, month - 1, day))
+}
+
 /** 기준일에서 N일 전/후. */
 export function shiftDays(key: string, delta: number): string {
   const d = parseDateKey(key)

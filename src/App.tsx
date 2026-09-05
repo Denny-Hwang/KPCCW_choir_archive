@@ -1,12 +1,17 @@
+import { Suspense, lazy } from 'react'
 import { HashRouter, NavLink, Route, Routes } from 'react-router-dom'
 import { ArchiveProvider, useArchive } from './lib/useArchive'
+import { Spinner } from './components/ui'
 import Home from './pages/Home'
 import Archive from './pages/Archive'
 import Library from './pages/Library'
 import Shelf from './pages/Shelf'
 import SongDetail from './pages/SongDetail'
-import Planner from './pages/Planner'
-import Settings from './pages/Settings'
+
+// 선곡·설정은 총무와 지휘자만 여는 화면이고 이 앱에서 가장 무겁다.
+// 대원이 홈만 보고 닫는 흔한 경우에 이걸 먼저 받게 할 이유가 없다.
+const Planner = lazy(() => import('./pages/Planner'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 /**
  * GitHub Pages에는 서버 리라이트가 없다. HashRouter를 쓰면 새로고침·딥링크가
@@ -76,21 +81,23 @@ function Chrome() {
       <StatusBar origin={origin} error={error} loading={loading} onRetry={reload} />
 
       <main className="flex-1 space-y-5 px-4 py-4">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/archive" element={<Archive />} />
-          <Route path="/archive/:month" element={<Archive />} />
-          <Route path="/library" element={<Library />} />
-          <Route path="/shelf" element={<Shelf />} />
-          <Route path="/shelf/:bookCode" element={<Shelf />} />
-          <Route path="/song/:songCode" element={<SongDetail />} />
-          <Route path="/planner" element={<Planner />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route
-            path="*"
-            element={<p className="card p-8 text-center text-sm text-stone-500">없는 화면입니다.</p>}
-          />
-        </Routes>
+        <Suspense fallback={<Spinner />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/archive" element={<Archive />} />
+            <Route path="/archive/:month" element={<Archive />} />
+            <Route path="/library" element={<Library />} />
+            <Route path="/shelf" element={<Shelf />} />
+            <Route path="/shelf/:bookCode" element={<Shelf />} />
+            <Route path="/song/:songCode" element={<SongDetail />} />
+            <Route path="/planner" element={<Planner />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route
+              path="*"
+              element={<p className="card p-8 text-center text-sm text-stone-500">없는 화면입니다.</p>}
+            />
+          </Routes>
+        </Suspense>
       </main>
 
       <footer className="space-y-1 px-4 pb-6 pt-2 text-center text-[11px] text-stone-400">
@@ -138,17 +145,11 @@ function StatusBar({
       </div>
     )
   }
-  if (origin === 'cache') {
+  // 캐시로 그리고 있어도 갱신이 도는 중이면 알리지 않는다. 실패가 확인됐을 때만 띄운다.
+  if (origin === 'cache' && error) {
     return (
       <p className="mx-4 mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
         네트워크에 연결하지 못해 마지막으로 받은 내용을 보여줍니다.
-      </p>
-    )
-  }
-  if (origin === 'demo') {
-    return (
-      <p className="mx-4 mt-2 rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
-        예시 데이터를 보고 있습니다.
       </p>
     )
   }

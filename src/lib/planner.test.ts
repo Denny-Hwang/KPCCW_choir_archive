@@ -3,7 +3,7 @@ import { buildCandidates, filterCandidates, EMPTY_FILTER, initialPlan, parseRehe
 import { buildRehearsalPaste, buildServicePaste, findDuplicateServiceDates } from './paste'
 import { DEFAULT_CONFIG } from './schema'
 import { linkIndex, pickFeaturedService, songUsage, sungHistory, totalAttendance } from './derive'
-import { previousWeekday, sundaysInMonth } from './date'
+import { nthWeekdayOfMonth, previousWeekday, sundaysInMonth } from './date'
 import type { ArchiveData, PracticeLink, Service, Song } from './types'
 
 function song(partial: Partial<Song>): Song {
@@ -36,11 +36,33 @@ describe('previousWeekday', () => {
   })
 })
 
+describe('nthWeekdayOfMonth', () => {
+  it('그 달의 N번째 요일을 낸다', () => {
+    expect(nthWeekdayOfMonth(2026, 10, 0, 4)).toBe('2026-10-25')
+    expect(nthWeekdayOfMonth(2026, 10, 3, 3)).toBe('2026-10-21')
+    // 1일이 그 요일이면 첫째 주가 1일이다.
+    expect(nthWeekdayOfMonth(2026, 11, 0, 1)).toBe('2026-11-01')
+    expect(nthWeekdayOfMonth(2026, 11, 0, 4)).toBe('2026-11-22')
+  })
+
+  it('그 달에 N번째가 없으면 마지막 것을 준다', () => {
+    // 2026-02는 주일이 1·8·15·22 넷뿐이다.
+    expect(nthWeekdayOfMonth(2026, 2, 0, 5)).toBe('2026-02-22')
+  })
+})
+
 describe('parseRehearsalPattern / suggestRehearsals', () => {
-  it('config의 기본 패턴을 읽는다', () => {
+  it('찬양일 기준 패턴을 읽는다 (주차 없음)', () => {
     expect(parseRehearsalPattern('주일 13:30, 수요일 20:00')).toEqual([
-      { 구분: '주일', weekday: 0, 시각: '13:30' },
-      { 구분: '수요일', weekday: 3, 시각: '20:00' },
+      { 구분: '주일', weekday: 0, 시각: '13:30', 주차: undefined },
+      { 구분: '수요일', weekday: 3, 시각: '20:00', 주차: undefined },
+    ])
+  })
+
+  it('달 기준 패턴을 읽는다 (N주)', () => {
+    expect(parseRehearsalPattern('2주 주일 13:30, 3주 수요일 20:00')).toEqual([
+      { 구분: '주일', weekday: 0, 시각: '13:30', 주차: 2 },
+      { 구분: '수요일', weekday: 3, 시각: '20:00', 주차: 3 },
     ])
   })
 
@@ -54,15 +76,39 @@ describe('parseRehearsalPattern / suggestRehearsals', () => {
       { 연습일: '2026-08-19', 시각: '20:00', 구분: '수요일', 장소: '' },
     ])
   })
+
+  it('N주 패턴은 그 달의 해당 주 요일을 쓴다', () => {
+    // 2026-10: 주일 4·11·18·25, 수요일 7·14·21·28
+    expect(suggestRehearsals('2026-10-25', parseRehearsalPattern(DEFAULT_CONFIG.연습기본패턴))).toEqual([
+      { 연습일: '2026-10-11', 시각: '13:30', 구분: '주일', 장소: '' },
+      { 연습일: '2026-10-18', 시각: '13:30', 구분: '주일', 장소: '' },
+      { 연습일: '2026-10-21', 시각: '20:00', 구분: '수요일', 장소: '' },
+    ])
+  })
+
+  it('찬양일보다 뒤에 오는 연습일은 버린다', () => {
+    // 둘째 주일에 부르면 셋째 주 연습은 뒤에 온다.
+    expect(suggestRehearsals('2026-10-11', parseRehearsalPattern(DEFAULT_CONFIG.연습기본패턴))).toEqual([])
+  })
 })
 
 describe('initialPlan', () => {
-  it('대상 월의 주일마다 연습 제안이 붙은 찬양일을 만든다', () => {
+  it('기본값은 넷째 주일 하나에 연습 세 번', () => {
     const plan = initialPlan(2026, 10, DEFAULT_CONFIG)
-    expect(plan).toHaveLength(4)
-    expect(plan[0].찬양일).toBe('2026-10-04')
+    expect(plan).toHaveLength(1)
+    expect(plan[0].찬양일).toBe('2026-10-25')
     expect(plan[0].곡).toEqual([])
-    expect(plan[0].rehearsals).toHaveLength(2)
+    expect(plan[0].rehearsals.map((r) => r.연습일)).toEqual(['2026-10-11', '2026-10-18', '2026-10-21'])
+  })
+
+  it('첫날이 주일인 달에서도 넷째 주일을 맞춘다', () => {
+    // 2026-11-01이 주일이므로 넷째 주일은 22일이다.
+    expect(initialPlan(2026, 11, DEFAULT_CONFIG)[0].찬양일).toBe('2026-11-22')
+  })
+
+  it('찬양주일이 0이면 그 달의 모든 주일을 만든다', () => {
+    const plan = initialPlan(2026, 10, { ...DEFAULT_CONFIG, 찬양주일: 0 })
+    expect(plan.map((p) => p.찬양일)).toEqual(['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25'])
   })
 })
 

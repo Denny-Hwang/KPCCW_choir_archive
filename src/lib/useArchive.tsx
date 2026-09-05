@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { loadArchive, type DataOrigin } from './api'
+import { cachedArchive, loadArchive, type DataOrigin } from './api'
 import { parsePayload } from './schema'
 import { linkIndex, rehearsalIndex, songIndex, sungHistory } from './derive'
 import type { ArchiveData, PracticeLink, Rehearsal, Song } from './types'
@@ -23,9 +23,12 @@ const EMPTY = parsePayload(null)
 const ArchiveContext = createContext<ArchiveState | null>(null)
 
 export function ArchiveProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<ArchiveData>(EMPTY)
-  const [origin, setOrigin] = useState<DataOrigin>('demo')
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null)
+  // 캐시가 있으면 첫 렌더부터 그것으로 그린다. Apps Script 왕복(1~3초)을 기다리는 동안
+  // 스피너를 보여줄 이유가 없다 — 갱신은 뒤에서 돌고, 끝나면 조용히 바뀐다.
+  const [seed] = useState(() => cachedArchive())
+  const [data, setData] = useState<ArchiveData>(seed?.data ?? EMPTY)
+  const [origin, setOrigin] = useState<DataOrigin>(seed ? 'cache' : 'network')
+  const [fetchedAt, setFetchedAt] = useState<string | null>(seed?.fetchedAt ?? null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
@@ -55,20 +58,20 @@ export function ArchiveProvider({ children }: { children: ReactNode }) {
     }
   }, [nonce])
 
-  const value = useMemo<ArchiveState>(
+  // 인덱스는 data가 바뀔 때만 다시 만든다. loading 토글마다 1,700행을 다시 훑을 이유가 없다.
+  const indexes = useMemo(
     () => ({
-      data,
-      origin,
-      fetchedAt,
-      loading,
-      error,
-      reload,
       songs: songIndex(data.songs),
       links: linkIndex(data.practiceLinks),
       rehearsals: rehearsalIndex(data.rehearsals),
       history: sungHistory(data.services),
     }),
-    [data, origin, fetchedAt, loading, error, reload],
+    [data],
+  )
+
+  const value = useMemo<ArchiveState>(
+    () => ({ data, origin, fetchedAt, loading, error, reload, ...indexes }),
+    [data, origin, fetchedAt, loading, error, reload, indexes],
   )
 
   return <ArchiveContext.Provider value={value}>{children}</ArchiveContext.Provider>

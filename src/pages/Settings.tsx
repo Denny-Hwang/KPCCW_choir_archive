@@ -66,7 +66,7 @@ export default function Settings() {
           </div>
           <div className="flex flex-wrap gap-1 text-xs">
             <Badge tone={origin === 'network' ? 'ok' : origin === 'cache' ? 'warn' : 'neutral'}>
-              {origin === 'network' ? '시트에서 직접' : origin === 'cache' ? '캐시' : '예시 데이터'}
+              {origin === 'network' ? '시트에서 직접' : origin === 'cache' ? '캐시' : '불러오기 실패'}
             </Badge>
             {data.updatedAt && <Badge>시트 기준 {data.updatedAt.slice(0, 16).replace('T', ' ')}</Badge>}
             {fetchedAt && <Badge>받은 시각 {fetchedAt.slice(0, 16).replace('T', ' ')}</Badge>}

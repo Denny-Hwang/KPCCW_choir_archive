@@ -292,7 +292,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   교회홈페이지: 'https://www.kpccw.org/',
   예배영상URL: 'https://www.kpccw.org/main/sub.html?pageCode=18&vodType=7',
   유튜브채널핸들: 'JandAArt',
-  연습기본패턴: '주일 13:30, 수요일 20:00',
+  연습기본패턴: '2주 주일 13:30, 3주 주일 13:30, 3주 수요일 20:00',
+  찬양주일: 4,
   중복경고개월: 12,
   절기힌트: { 1: '일반', 3: '사순', 4: '부활', 10: '추수감사', 11: '대림', 12: '성탄' },
   raw: {},
@@ -327,6 +328,7 @@ export function parseConfig(input: RawRow[] | Record<string, unknown> | undefine
     .filter((p): p is Part => (PART_ORDER as string[]).includes(p))
 
   const 중복경고개월 = num(raw['중복경고개월'])
+  const 찬양주일 = num(raw['찬양주일'])
   const hints = raw['절기힌트'] ? parseSeasonHints(raw['절기힌트']) : DEFAULT_CONFIG.절기힌트
 
   return {
@@ -343,6 +345,8 @@ export function parseConfig(input: RawRow[] | Record<string, unknown> | undefine
     예배영상URL: raw['예배영상URL'] ?? DEFAULT_CONFIG.예배영상URL,
     유튜브채널핸들: raw['유튜브채널핸들'] || DEFAULT_CONFIG.유튜브채널핸들,
     연습기본패턴: raw['연습기본패턴'] || DEFAULT_CONFIG.연습기본패턴,
+    // 0은 "매주 주일"이라는 뜻이므로 살려 둔다. 키가 없을 때만 기본값을 쓴다.
+    찬양주일: 찬양주일 != null && 찬양주일 >= 0 && 찬양주일 <= 5 ? 찬양주일 : DEFAULT_CONFIG.찬양주일,
     중복경고개월: 중복경고개월 && 중복경고개월 > 0 ? 중복경고개월 : DEFAULT_CONFIG.중복경고개월,
     절기힌트: Object.keys(hints).length ? hints : DEFAULT_CONFIG.절기힌트,
     raw,

@@ -10,6 +10,24 @@
     <meta property="og:site_name" content="중부워싱턴한인장로교회 (KPCCW)" />
     <meta property="og:description" content="이번 주 찬양곡과 파트별 연습 영상" />
     <title>중부워싱턴한인장로교회 성가대</title>
+
+    <!-- 홈 화면 바로가기 아이콘. 안드로이드는 manifest를, iOS는 apple-touch-icon을 본다. -->
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="KPCCW 성가대" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta property="og:image" content="%BASE_URL%icon-512.png" />
+
+    <!--
+      자료는 Apps Script에서 온다. 연결을 미리 열어 두면 첫 요청에서 DNS·TLS 왕복이 빠진다.
+      리다이렉트 대상(googleusercontent)까지 걸어 둔다 — exec은 302로 그리로 넘긴다.
+    -->
+    <link rel="preconnect" href="https://script.google.com" crossorigin />
+    <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin />
   </head>
   <body>
     <div id="root"></div>

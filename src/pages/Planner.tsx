@@ -197,7 +197,13 @@ export default function Planner() {
       {picking && (
         <SongPicker
           candidates={candidates}
+          books={data.books}
           seasonHint={seasonHint}
+          warnMonths={data.config.중복경고개월}
+          subtitle={(() => {
+            const d = plan.find((x) => x.id === picking)
+            return d ? `${formatMonthDay(d.찬양일)} ${d.예배구분}`.trim() : undefined
+          })()}
           onClose={() => setPicking(null)}
           onPick={(표시명) => {
             setPlan((prev) =>

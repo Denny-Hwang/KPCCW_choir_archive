@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="중부워싱턴한인장로교회 성가대">
+  <!--
+    안드로이드 마스커블 아이콘. 런처가 바깥 20%를 원·둥근사각 어느 모양으로든 잘라내므로,
+    바탕은 화면 끝까지 채우고 그림만 안쪽 80%에 넣는다.
+    여기에 둥근 사각형을 그리면 원형 마스크 안에 사각형이 비쳐 보인다.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8E4A56" />
+      <stop offset="1" stop-color="#6B3540" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)" />
+  <g transform="translate(64 64) scale(0.75)">
+    <!-- 펼친 악보 -->
+  <g fill="none" stroke="#F5EDE6" stroke-linecap="round" opacity="0.5">
+    <path d="M96 358 C 150 336, 210 336, 256 356" stroke-width="14" />
+    <path d="M256 356 C 302 336, 362 336, 416 358" stroke-width="14" />
+    <path d="M120 316 C 166 300, 214 300, 250 314" stroke-width="9" />
+    <path d="M262 314 C 298 300, 346 300, 392 316" stroke-width="9" />
+  </g>
+
+  <!-- 8분음표 한 쌍 -->
+  <g fill="#FFFFFF">
+    <g transform="rotate(-20 176 268)">
+      <ellipse cx="176" cy="268" rx="50" ry="38" />
+    </g>
+    <g transform="rotate(-20 326 236)">
+      <ellipse cx="326" cy="236" rx="50" ry="38" />
+    </g>
+    <rect x="211" y="104" width="19" height="164" rx="9" />
+    <rect x="361" y="80" width="19" height="156" rx="9" />
+    <path d="M211 104 L380 80 L380 128 L211 152 Z" />
+  </g>
+  </g>
+</svg>

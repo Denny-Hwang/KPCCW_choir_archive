@@ -103,7 +103,10 @@ export interface AppConfig {
   /** 시트의 IANA 시간대. 날짜·시각 해석의 기준 (기본 America/Los_Angeles). */
   시간대: string
   유튜브채널핸들: string
+  /** 연습 기본 패턴. `2주 주일 13:30` = 그 달 둘째 주일, `주일 13:30` = 찬양일 직전 주일. */
   연습기본패턴: string
+  /** 찬양일이 그 달의 몇째 주일인지 (기본 4). 0이면 매주 주일을 만든다. */
+  찬양주일: number
   중복경고개월: number
   절기힌트: Record<number, string>
   /** 위에서 다루지 않은 키도 잃어버리지 않고 보관한다. */

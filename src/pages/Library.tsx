@@ -65,7 +65,7 @@ export default function Library() {
       <div className="flex flex-wrap gap-3 text-xs text-stone-600">
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={filter.검증만} onChange={(e) => set('검증만', e.target.checked)} />
-          확인된 곡만
+          시트에서 확인 체크한 곡만
         </label>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={filter.중복숨김} onChange={(e) => set('중복숨김', e.target.checked)} />

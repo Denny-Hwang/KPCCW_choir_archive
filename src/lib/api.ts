@@ -21,8 +21,8 @@ const ENDPOINT_KEY = 'kpccw.archive.endpoint'
 const DEFAULT_ENDPOINT =
   'https://script.google.com/macros/s/AKfycbw0mnamF0M6fOE5qryCMneZx48yivldMwz3APG4FquLK3R4zOKlZcG7D0ZPO1eW1v4/exec'
 
-/** 'error' = 엔드포인트는 있는데 못 받았고 보여줄 캐시도 없는 상태. */
-export type DataOrigin = 'network' | 'cache' | 'demo' | 'error'
+/** 'error' = 못 받았고 보여줄 캐시도 없는 상태. */
+export type DataOrigin = 'network' | 'cache' | 'error'
 
 export interface LoadResult {
   data: ArchiveData
@@ -69,11 +69,20 @@ export function clearCache(): void {
   safeRemove(CACHE_KEY)
 }
 
-/** 엔드포인트가 아직 없을 때 보여줄 예시 데이터. 앱이 무엇을 하는지 즉시 보이게 한다. */
-async function loadDemo(): Promise<RawPayload> {
-  const res = await fetch(`${import.meta.env.BASE_URL}demo-data.json`, { cache: 'no-cache' })
-  if (!res.ok) throw new Error(`예시 데이터를 불러오지 못했습니다 (${res.status})`)
-  return (await res.json()) as RawPayload
+/**
+ * 저장해 둔 마지막 응답. 네트워크를 기다리지 않고 **즉시** 그리기 위한 것이다.
+ *
+ * Apps Script는 매 요청마다 스크립트를 깨워 시트 전체를 읽으므로 1~3초가 예사다.
+ * 그걸 기다리는 동안 빈 화면을 보여줄 이유가 없다 — 지난주 공지는 이미 손에 있다.
+ */
+export function cachedArchive(): { data: ArchiveData; fetchedAt: string } | null {
+  const cached = readCache()
+  if (!cached) return null
+  try {
+    return { data: parsePayload(cached.payload), fetchedAt: cached.fetchedAt }
+  } catch {
+    return null
+  }
 }
 
 async function fetchPayload(endpoint: string): Promise<RawPayload> {
@@ -90,23 +99,12 @@ async function fetchPayload(endpoint: string): Promise<RawPayload> {
 }
 
 export async function loadArchive(): Promise<LoadResult> {
-  const endpoint = getEndpoint()
-  const cached = readCache()
-
-  // 엔드포인트가 아예 없을 때만 예시 데이터를 쓴다.
-  if (!endpoint) {
-    try {
-      return { data: parsePayload(await loadDemo()), origin: 'demo', fetchedAt: null, error: null }
-    } catch (e) {
-      return { data: parsePayload(null), origin: 'error', fetchedAt: null, error: message(e) }
-    }
-  }
-
   try {
-    const payload = await fetchPayload(endpoint)
+    const payload = await fetchPayload(getEndpoint())
     return { data: parsePayload(payload), origin: 'network', fetchedAt: writeCache(payload), error: null }
   } catch (e) {
-    // 마지막으로 받은 내용이 있으면 그것을 보여준다 (stale-while-revalidate).
+    // 실패하면 마지막으로 받은 내용이 화면에 그대로 남는다.
+    const cached = readCache()
     if (cached) {
       return { data: parsePayload(cached.payload), origin: 'cache', fetchedAt: cached.fetchedAt, error: message(e) }
     }
