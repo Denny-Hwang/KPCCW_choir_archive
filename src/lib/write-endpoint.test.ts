@@ -90,25 +90,21 @@ function fixture() {
       REHEARSAL_HEADERS,
       [utcDate('2026-10-25'), utcDate('2026-10-11'), '13:30', '주일', '', ''],
     ]),
-    new FakeSheet('config', [['키', '값']]),
+    new FakeSheet('config', [
+      ['키', '값'],
+      ['앱_제목', '테스트 성가대'],
+      ['앱편집키', 'Secret'],
+    ]),
   ])
 }
 
 function load() {
-  const props = new Map<string, string>([['WRITE_KEY', 'secret']])
   let lockFree = true
-  const state = { ss: fixture(), props, validationsInstalled: 0, setLockFree: (v: boolean) => { lockFree = v } }
+  const state = { ss: fixture(), validationsInstalled: 0, setLockFree: (v: boolean) => { lockFree = v } }
   const sandbox: Record<string, any> = {
     SpreadsheetApp: {
       DataValidationCriteria: { VALUE_IN_RANGE: 'VALUE_IN_RANGE', VALUE_IN_LIST: 'VALUE_IN_LIST' },
       getActiveSpreadsheet: () => state.ss,
-    },
-    PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: (k: string) => props.get(k) ?? null,
-        setProperty: (k: string, v: string) => props.set(k, v),
-        deleteProperty: (k: string) => props.delete(k),
-      }),
     },
     LockService: {
       getScriptLock: () => ({ tryLock: () => lockFree, releaseLock: () => {} }),
@@ -161,11 +157,30 @@ describe('doPost / handleWrite_', () => {
     expect(state.ss.sheets.services.rows).toHaveLength(3)
   })
 
-  it('시트에 키가 없으면 메뉴 위치를 알려준다', () => {
-    state.props.delete('WRITE_KEY')
-    const r = post(gs, { key: 'secret', action: 'applyPlan', payload: basePayload })
-    expect(r.ok).toBe(false)
-    expect(r.error).toContain('앱 편집 키 설정')
+  it('키는 config 시트의 앱편집키이고 대소문자·앞뒤 공백을 가리지 않는다', () => {
+    expect(post(gs, { key: ' SECRET ', action: 'applyPlan', payload: basePayload }).ok).toBe(true)
+  })
+
+  it('config에 앱편집키 행이 없거나 비어 있으면 기본값 selah', () => {
+    state.ss.sheets.config.rows = [['키', '값'], ['앱_제목', '테스트 성가대']]
+    expect(post(gs, { key: 'wrong', action: 'applyPlan', payload: basePayload }).ok).toBe(false)
+    expect(post(gs, { key: 'Selah', action: 'applyPlan', payload: basePayload }).ok).toBe(true)
+
+    state.ss.sheets.config.rows = [['키', '값'], ['앱편집키', '  ']]
+    expect(post(gs, { key: 'selah', action: 'applyPlan', payload: { ...basePayload, 찬양일: '2026-12-27' } }).ok).toBe(true)
+  })
+
+  it('틀린 키의 오류는 어느 시트의 어느 값을 보라고 말한다', () => {
+    expect(post(gs, { key: 'wrong', action: 'applyPlan', payload: basePayload }).error).toContain('앱편집키')
+  })
+
+  it('GET 응답의 config에는 앱편집키가 나가지 않는다', () => {
+    // 앱을 여는 누구나 이 JSON을 본다. 다른 설정은 그대로 나가야 한다.
+    const payload = JSON.parse(gs.doGet().text)
+    const keys = payload.config.map((row: { 키: string }) => row['키'])
+    expect(keys).toContain('앱_제목')
+    expect(keys).not.toContain('앱편집키')
+    expect(JSON.stringify(payload)).not.toContain('Secret')
   })
 
   it('모르는 동작은 거부한다', () => {

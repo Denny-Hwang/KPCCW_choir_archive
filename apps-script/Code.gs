@@ -91,11 +91,16 @@ function resolveDataSheets_(ss) {
   return DEFAULT_DATA_SHEETS;
 }
 
+/** config 시트에 있지만 GET 응답에는 절대 넣지 않는 키. 앱을 여는 누구나 그 응답을 본다. */
+var CONFIG_SECRET_KEYS = ['앱편집키'];
+
 /**
  * 헤더 행의 이름을 키로 쓴다 (§원칙). 열 위치에 의존하지 않으므로
  * 편집자가 열을 삽입·삭제해도 앱이 깨지지 않는다.
+ *
+ * config의 비밀 행은 기본으로 뺀다. 스크립트 안에서 그 값이 필요할 때만 includeSecrets를 켠다.
  */
-function readSheet_(ss, name, tz) {
+function readSheet_(ss, name, tz, includeSecrets) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) return [];
 
@@ -119,7 +124,9 @@ function readSheet_(ss, name, tz) {
       if (value !== '') hasValue = true;
     }
 
-    if (hasValue) out.push(obj);
+    if (!hasValue) continue;
+    if (name === 'config' && !includeSecrets && CONFIG_SECRET_KEYS.indexOf(String(obj['키']).trim()) !== -1) continue;
+    out.push(obj);
   }
   return out;
 }
@@ -173,7 +180,6 @@ function onOpen() {
     .addItem('악보집 일괄 등록', 'registerOwnedBooks')
     .addItem('악보집 등록 (한 권)', 'registerBookPrompt')
     .addSeparator()
-    .addItem('앱 편집 키 설정', 'setWriteKeyPrompt')
     .addItem('엔드포인트 점검', 'validateData')
     .addItem('캐시 비우기', 'clearCache')
     .addToUi();
@@ -184,31 +190,28 @@ function onOpen() {
 /* ------------------------------------------------------------------------ */
 
 /**
- * 편집 키는 **스크립트 속성**에 둔다. config 시트는 GET으로 통째로 공개되므로
- * 거기에 두면 키가 아니다. 앱은 이 키를 사용자가 한 번 입력해 브라우저에만 남긴다.
+ * 편집 키는 config 시트의 `앱편집키` 행이다. 총무가 다른 설정과 같은 자리에서 바꾼다.
+ * 행이 없으면 기본값 `selah`. 대소문자는 가리지 않는다 — 폰에서 첫 글자가 대문자로 바뀌는 일이 흔하다.
+ *
+ * config 시트는 GET으로 통째로 나가므로 이 행만은 내보내기에서 뺀다 (readSheet_ 아래 CONFIG_SECRET_KEYS).
+ * 앱은 이 키를 사용자가 한 번 입력해 브라우저에만 남긴다.
  */
-var WRITE_KEY_PROPERTY = 'WRITE_KEY';
+var WRITE_KEY_CONFIG = '앱편집키';
+var WRITE_KEY_DEFAULT = 'selah';
 
-function setWriteKeyPrompt() {
-  var ui = SpreadsheetApp.getUi();
-  var props = PropertiesService.getScriptProperties();
-  var current = String(props.getProperty(WRITE_KEY_PROPERTY) || '');
-  var response = ui.prompt(
-    '앱 편집 키 설정',
-    (current ? '지금 키: ' + current + '\n\n' : '지금은 키가 없어 앱에서 쓸 수 없습니다.\n\n') +
-      '앱의 "다음 찬양으로" 버튼이 시트에 쓸 때 맞춰 보는 키입니다.\n' +
-      '총무·지휘자에게만 알려 주세요. 비워 두고 확인하면 쓰기를 막습니다.',
-    ui.ButtonSet.OK_CANCEL
-  );
-  if (response.getSelectedButton() !== ui.Button.OK) return;
-  var next = String(response.getResponseText() || '').trim();
-  if (next) {
-    props.setProperty(WRITE_KEY_PROPERTY, next);
-    ui.alert('편집 키를 저장했습니다. 앱의 설정 화면(…/#/settings)이나 "다음 찬양으로" 창에 같은 키를 넣으면 됩니다.');
-  } else {
-    props.deleteProperty(WRITE_KEY_PROPERTY);
-    ui.alert('편집 키를 지웠습니다. 앱에서 시트에 쓸 수 없습니다.');
+function normalizeWriteKey_(value) {
+  return String(value === null || value === undefined ? '' : value).trim().toLowerCase();
+}
+
+function expectedWriteKey_(ss) {
+  var rows = readSheet_(ss, 'config', ss.getSpreadsheetTimeZone(), true);
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i]['키']).trim() === WRITE_KEY_CONFIG) {
+      var value = normalizeWriteKey_(rows[i]['값']);
+      return value || WRITE_KEY_DEFAULT;
+    }
   }
+  return WRITE_KEY_DEFAULT;
 }
 
 /**
@@ -229,12 +232,9 @@ function doPost(e) {
 }
 
 function handleWrite_(body) {
-  var expected = String(PropertiesService.getScriptProperties().getProperty(WRITE_KEY_PROPERTY) || '').trim();
-  if (!expected) {
-    return { ok: false, error: '시트에 편집 키가 없습니다. 시트 메뉴 [성가 아카이브 > 앱 편집 키 설정]에서 먼저 정하세요.' };
-  }
-  if (String((body && body.key) || '').trim() !== expected) {
-    return { ok: false, error: '편집 키가 맞지 않습니다.' };
+  var ss = getSpreadsheet_();
+  if (normalizeWriteKey_(body && body.key) !== expectedWriteKey_(ss)) {
+    return { ok: false, error: '편집 키가 맞지 않습니다. config 시트의 앱편집키 값을 확인하세요.' };
   }
   if (!body || body.action !== 'applyPlan') {
     return { ok: false, error: '알 수 없는 요청입니다: ' + String(body && body.action) };
@@ -246,7 +246,7 @@ function handleWrite_(body) {
     return { ok: false, error: '다른 쓰기가 진행 중입니다. 잠시 후 다시 시도하세요.' };
   }
   try {
-    return applyPlan_(getSpreadsheet_(), body.payload || {});
+    return applyPlan_(ss, body.payload || {});
   } finally {
     lock.releaseLock();
   }

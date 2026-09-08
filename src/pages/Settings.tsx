@@ -86,7 +86,7 @@ export default function Settings() {
               type="password"
               value={writeKey}
               onChange={(e) => setWriteKeyInput(e.target.value)}
-              placeholder="시트 메뉴 [성가 아카이브 > 앱 편집 키 설정]에서 정한 키"
+              placeholder="config 시트의 앱편집키 값 (대소문자 무관)"
               className="field mt-1"
               autoComplete="off"
             />
