@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildWriteRequest, parseWriteResponse, planToPayloads, validatePlan, type PlanPayload } from './write'
+import {
+  buildVerifyRequest,
+  buildWriteRequest,
+  parseVerifyResponse,
+  parseWriteResponse,
+  planToPayloads,
+  validatePlan,
+  type PlanPayload,
+} from './write'
 
 const payload: PlanPayload = {
   찬양일: '2026-10-25',
@@ -49,6 +57,24 @@ describe('planToPayloads', () => {
 describe('buildWriteRequest', () => {
   it('키·동작·페이로드를 담은 JSON', () => {
     expect(JSON.parse(buildWriteRequest(payload, 'k'))).toEqual({ key: 'k', action: 'applyPlan', payload })
+  })
+})
+
+describe('verifyLink 요청·응답', () => {
+  const payload = { 표시명: '가곡 (중47-01)', 파트: '합창', URL: 'https://youtu.be/aaa', 검증: true }
+
+  it('요청은 action이 verifyLink', () => {
+    expect(JSON.parse(buildVerifyRequest(payload, 'k'))).toEqual({ key: 'k', action: 'verifyLink', payload })
+  })
+
+  it('성공 응답을 읽는다', () => {
+    expect(parseVerifyResponse('{"ok":true,"updated":1,"검증":false}')).toEqual({ ok: true, updated: 1, 검증: false })
+    expect(parseVerifyResponse('{"ok":true}')).toEqual({ ok: true, updated: 0, 검증: true })
+  })
+
+  it('실패 응답은 이유를 전한다', () => {
+    expect(parseVerifyResponse('{"ok":false,"error":"줄을 찾지 못했습니다"}')).toEqual({ ok: false, error: '줄을 찾지 못했습니다' })
+    expect(parseVerifyResponse('<html>').ok).toBe(false)
   })
 })
 

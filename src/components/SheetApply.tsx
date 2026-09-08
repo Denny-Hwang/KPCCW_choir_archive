@@ -7,6 +7,7 @@ import { titleOf } from '../lib/derive'
 import type { PlannedDate } from '../lib/planner'
 import type { Song } from '../lib/types'
 import { Badge } from './ui'
+import { WriteKeyField } from './WriteKeyField'
 
 type RowState = { payload: PlanPayload; state: 'pending' | 'saving' | 'done' | 'failed'; result?: WriteResult }
 
@@ -64,30 +65,14 @@ export function SheetApply({ plan, songs }: { plan: PlannedDate[]; songs: Map<st
         {skipped > 0 && ` 곡이 없는 ${skipped}개 날은 건너뜁니다.`}
       </p>
 
-      <div className="space-y-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="label">편집 키</p>
-          {!editingKey && (
-            <button type="button" className="text-xs text-stone-400 underline" onClick={() => setEditingKey(true)}>
-              바꾸기
-            </button>
-          )}
-        </div>
-        {editingKey ? (
-          <input
-            type="password"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="config 시트의 앱편집키 값 (대소문자 무관)"
-            className="field"
-            autoComplete="off"
-            disabled={busy}
-          />
-        ) : (
-          <p className="text-xs text-stone-500">저장된 키를 씁니다.</p>
-        )}
-        {keyError && <p className="text-xs text-rose-700">{keyError}</p>}
-      </div>
+      <WriteKeyField
+        value={key}
+        onChange={setKey}
+        editing={editingKey}
+        onEdit={() => setEditingKey(true)}
+        disabled={busy}
+        error={keyError}
+      />
 
       {problems.length > 0 && (
         <ul className="space-y-1 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
