@@ -94,14 +94,56 @@ export function parseWriteResponse(text: string): WriteResult {
   }
 }
 
-export async function applyPlan(payload: PlanPayload, key: string): Promise<WriteResult> {
+/** 응답 본문을 문자열로. 상태 코드가 200이 아니면 그 자체가 실패다. */
+async function postWrite(body: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const res = await fetch(getEndpoint(), {
     method: 'POST',
     redirect: 'follow',
     // application/json이면 preflight가 나가고 Apps Script는 그것을 받지 못한다.
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: buildWriteRequest(payload, key),
+    body,
   })
   if (!res.ok) return { ok: false, error: `서버 응답 오류 (${res.status})` }
-  return parseWriteResponse(await res.text())
+  return { ok: true, text: await res.text() }
+}
+
+export async function applyPlan(payload: PlanPayload, key: string): Promise<WriteResult> {
+  const r = await postWrite(buildWriteRequest(payload, key))
+  return r.ok ? parseWriteResponse(r.text) : r
+}
+
+/* ---- 파트 영상 검증 (§9.3) — 곡 상세의 "확인" 버튼 ---- */
+
+export interface VerifyPayload {
+  표시명: string
+  파트: string
+  URL: string
+  검증: boolean
+}
+
+export type VerifyResult = { ok: true; updated: number; 검증: boolean } | { ok: false; error: string }
+
+export function buildVerifyRequest(payload: VerifyPayload, key: string): string {
+  return JSON.stringify({ key, action: 'verifyLink', payload })
+}
+
+export function parseVerifyResponse(text: string): VerifyResult {
+  const base = parseWriteResponse(text)
+  if (!base.ok) return base
+  let parsed: Record<string, unknown> = {}
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    /* parseWriteResponse가 이미 걸렀다. */
+  }
+  return {
+    ok: true,
+    updated: typeof parsed.updated === 'number' ? parsed.updated : 0,
+    검증: parsed.검증 !== false,
+  }
+}
+
+export async function verifyLink(payload: VerifyPayload, key: string): Promise<VerifyResult> {
+  const r = await postWrite(buildVerifyRequest(payload, key))
+  return r.ok ? parseVerifyResponse(r.text) : r
 }

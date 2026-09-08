@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { linksByPart, verifiedLinks } from '../lib/derive'
 import { normalizeLink } from '../lib/youtube'
 import { PART_ORDER, type Part, type PracticeLink } from '../lib/types'
@@ -102,8 +103,17 @@ export function PartLinkChips({ links, order = PART_ORDER }: { links: PracticeLi
   )
 }
 
-/** 곡 상세용 — 파트별 임베드와 상태 표시 (§6.5). */
-export function PartLinkList({ links }: { links: PracticeLink[] }) {
+/**
+ * 곡 상세용 — 파트별 임베드와 상태 표시 (§6.5).
+ * `action`을 주면 각 영상의 머리줄 오른쪽에 그린다 — 곡 상세가 "확인" 버튼을 여기로 넣는다 (§9.3).
+ */
+export function PartLinkList({
+  links,
+  action,
+}: {
+  links: PracticeLink[]
+  action?: (link: PracticeLink) => ReactNode
+}) {
   if (!links.length) return <p className="text-sm text-stone-400">등록된 파트 영상이 없습니다.</p>
   return (
     <ul className="space-y-3">
@@ -111,11 +121,12 @@ export function PartLinkList({ links }: { links: PracticeLink[] }) {
         const normalized = normalizeLink(link.URL, link.시작초)
         return (
           <li key={`${link.파트}-${i}`} className="card overflow-hidden">
-            <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
               <span className="text-sm font-bold">{link.파트}</span>
-              <span className="flex items-center gap-1">
+              <span className="flex flex-wrap items-center gap-1">
                 {link.검증 ? <Badge tone="ok">확인됨</Badge> : <UnverifiedBadge />}
                 {link.출처 && <Badge>{link.출처}</Badge>}
+                {action?.(link)}
               </span>
             </div>
             {normalized.embedUrl ? (

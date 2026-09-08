@@ -86,6 +86,12 @@ function fixture() {
       [utcDate('2026-10-25'), '주일', '가곡 (중47-01)', '', '', '', '', '', '', '', '', ''],
       [utcDate('2026-08-23'), '주일', '나곡 (중47-02)', '다곡 (중47-03)', '라곡 (중47-04)', '', '', '', '', '', '', ''],
     ]),
+    new FakeSheet('practice_links', [
+      ['표시명', '파트', 'URL', '시작초', '올린이', '출처', '검증'],
+      ['가곡 (중47-01)', '합창', 'https://youtu.be/aaa', '', '', 'youtube_channel', false],
+      ['가곡 (중47-01)', '소프라노', 'https://youtu.be/bbb', '', '', 'youtube_channel', false],
+      ['가곡 (중47-01)', '소프라노', 'https://youtu.be/ccc', '', '', 'manual', true],
+    ]),
     new FakeSheet('rehearsals', [
       REHEARSAL_HEADERS,
       [utcDate('2026-10-25'), utcDate('2026-10-11'), '13:30', '주일', '', ''],
@@ -197,6 +203,58 @@ describe('doPost / handleWrite_', () => {
     const r = post(gs, { key: 'secret', action: 'applyPlan', payload: basePayload })
     expect(r.ok).toBe(false)
     expect(r.error).toContain('진행 중')
+  })
+})
+
+describe('verifyLink_', () => {
+  let gs: Record<string, any>
+  let state: ReturnType<typeof load>['state']
+  const verify = (payload: unknown) => post(gs, { key: 'secret', action: 'verifyLink', payload })
+  const rows = () => state.ss.sheets.practice_links.rows
+  beforeEach(() => {
+    ;({ gs, state } = load())
+  })
+
+  it('(표시명, 파트, URL)로 찾은 줄의 검증만 켠다', () => {
+    const r = verify({ 표시명: '가곡 (중47-01)', 파트: '합창', URL: 'https://youtu.be/aaa', 검증: true })
+    expect(r).toEqual({ ok: true, updated: 1, 검증: true })
+    expect(rows()[1][6]).toBe(true)
+    expect(rows()[2][6]).toBe(false)
+    expect(rows()[1].slice(0, 6)).toEqual(['가곡 (중47-01)', '합창', 'https://youtu.be/aaa', '', '', 'youtube_channel'])
+  })
+
+  it('같은 곡·파트에 링크가 둘이면 URL이 맞는 줄만 건드린다', () => {
+    verify({ 표시명: '가곡 (중47-01)', 파트: '소프라노', URL: 'https://youtu.be/bbb', 검증: true })
+    expect(rows()[2][6]).toBe(true)
+    expect(rows()[3][6]).toBe(true)
+  })
+
+  it('끄는 것도 받는다', () => {
+    const r = verify({ 표시명: '가곡 (중47-01)', 파트: '소프라노', URL: 'https://youtu.be/ccc', 검증: false })
+    expect(r).toMatchObject({ ok: true, 검증: false })
+    expect(rows()[3][6]).toBe(false)
+  })
+
+  it('검증을 안 주면 켜는 것으로 본다', () => {
+    verify({ 표시명: '가곡 (중47-01)', 파트: '합창', URL: 'https://youtu.be/aaa' })
+    expect(rows()[1][6]).toBe(true)
+  })
+
+  it('줄을 못 찾으면 어느 줄인지 말하고 아무것도 바꾸지 않는다', () => {
+    const before = JSON.stringify(rows())
+    const r = verify({ 표시명: '가곡 (중47-01)', 파트: '알토', URL: 'https://youtu.be/zzz', 검증: true })
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('알토')
+    expect(JSON.stringify(rows())).toBe(before)
+  })
+
+  it('표시명·파트·URL이 빠지면 거부한다', () => {
+    expect(verify({ 표시명: '가곡 (중47-01)', 파트: '합창' }).ok).toBe(false)
+  })
+
+  it('키가 틀리면 거부한다', () => {
+    expect(post(gs, { key: 'nope', action: 'verifyLink', payload: { 표시명: 'x', 파트: 'y', URL: 'z' } }).ok).toBe(false)
+    expect(rows()[1][6]).toBe(false)
   })
 })
 

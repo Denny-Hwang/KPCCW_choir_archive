@@ -10,6 +10,7 @@ import { songUsage, titleOf } from '../lib/derive'
 import { formatLongDate, formatMonthDay, todayKey, weekdayOf } from '../lib/date'
 import type { Rehearsal, Song } from '../lib/types'
 import { Badge, CopyBlock } from './ui'
+import { WriteKeyField } from './WriteKeyField'
 
 type RehearsalDraft = Pick<Rehearsal, '연습일' | '시각' | '구분' | '장소'>
 
@@ -225,31 +226,8 @@ export function PlanDialog({ song, onClose }: { song: Song; onClose: () => void 
                 </button>
               </section>
 
-              <section className="card space-y-2 p-4">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-bold text-stone-600">편집 키</p>
-                  {!editingKey && (
-                    <button type="button" className="text-xs text-stone-400 underline" onClick={() => setEditingKey(true)}>
-                      바꾸기
-                    </button>
-                  )}
-                </div>
-                {editingKey ? (
-                  <>
-                    <input
-                      type="password"
-                      value={key}
-                      onChange={(e) => setKey(e.target.value)}
-                      placeholder="config 시트의 앱편집키 값 (대소문자 무관)"
-                      className="field"
-                      autoComplete="off"
-                      disabled={busy}
-                    />
-                    <p className="text-xs text-stone-400">이 브라우저에만 저장됩니다. 총무·지휘자만 알고 있으면 됩니다.</p>
-                  </>
-                ) : (
-                  <p className="text-xs text-stone-500">저장된 키를 씁니다.</p>
-                )}
+              <section className="card p-4">
+                <WriteKeyField value={key} onChange={setKey} editing={editingKey} onEdit={() => setEditingKey(true)} disabled={busy} />
               </section>
 
               {problems.length > 0 && (

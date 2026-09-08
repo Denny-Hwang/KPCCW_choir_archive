@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { songUsage } from '../lib/derive'
 import { formatLongDate, todayKey } from '../lib/date'
-import { PartLinkList } from '../components/PartLinks'
 import { PlanDialog } from '../components/PlanDialog'
+import { VerifyLinks } from '../components/VerifyLinks'
 import { Badge, Empty, Section, Spinner, UnverifiedBadge } from '../components/ui'
 
 /** 곡 상세 (§6.5). 메타데이터 + 파트별 영상 + 이 곡을 부른 날짜 이력 + "다음 찬양으로". */
@@ -91,7 +91,7 @@ export default function SongDetail() {
       </div>
 
       <Section title="파트별 영상">
-        <PartLinkList links={songLinks} />
+        <VerifyLinks links={songLinks} />
       </Section>
 
       <Section title={`부른 이력 (${이력.length}회)`}>

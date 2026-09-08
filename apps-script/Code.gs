@@ -186,7 +186,9 @@ function onOpen() {
 }
 
 /* ------------------------------------------------------------------------ */
-/* 쓰기 (§12.2) — 앱의 "다음 찬양으로" 버튼 하나만 받는다.                         */
+/* 쓰기 (§12.2) — 동작은 둘뿐이다.                                                */
+/*   applyPlan   찬양일 하나에 곡·연습을 추가 ("다음 찬양으로", "시트에 반영")      */
+/*   verifyLink  파트 영상 한 줄의 검증 체크를 켜거나 끈다 (곡 상세의 "확인")        */
 /* ------------------------------------------------------------------------ */
 
 /**
@@ -216,7 +218,8 @@ function expectedWriteKey_(ss) {
 
 /**
  * 브라우저는 preflight를 피하려고 text/plain으로 보낸다. 본문은 JSON이다.
- *   { key, action: 'applyPlan', payload: { 찬양일, 예배구분, 곡: [표시명…], rehearsals: [{연습일, 시각, 구분, 장소}] } }
+ *   { key, action: 'applyPlan',  payload: { 찬양일, 예배구분, 곡: [표시명…], rehearsals: [{연습일, 시각, 구분, 장소}] } }
+ *   { key, action: 'verifyLink', payload: { 표시명, 파트, URL, 검증: true|false } }
  * 응답은 언제나 JSON이고, 실패도 { ok: false, error } 로 200에 실어 보낸다 —
  * Apps Script는 상태 코드를 고를 수 없고, 앱은 어차피 본문을 읽어야 이유를 안다.
  */
@@ -236,8 +239,9 @@ function handleWrite_(body) {
   if (normalizeWriteKey_(body && body.key) !== expectedWriteKey_(ss)) {
     return { ok: false, error: '편집 키가 맞지 않습니다. config 시트의 앱편집키 값을 확인하세요.' };
   }
-  if (!body || body.action !== 'applyPlan') {
-    return { ok: false, error: '알 수 없는 요청입니다: ' + String(body && body.action) };
+  var action = body && body.action;
+  if (action !== 'applyPlan' && action !== 'verifyLink') {
+    return { ok: false, error: '알 수 없는 요청입니다: ' + String(action) };
   }
 
   // 두 사람이 같은 순간에 누르면 같은 찬양일 행이 둘 생긴다. 잠그고 하나씩 처리한다.
@@ -246,10 +250,54 @@ function handleWrite_(body) {
     return { ok: false, error: '다른 쓰기가 진행 중입니다. 잠시 후 다시 시도하세요.' };
   }
   try {
-    return applyPlan_(ss, body.payload || {});
+    var payload = body.payload || {};
+    return action === 'verifyLink' ? verifyLink_(ss, payload) : applyPlan_(ss, payload);
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * practice_links 한 줄의 `검증`을 켜거나 끈다 (§9.3의 "사람이 재생해 보고 체크").
+ *
+ * 줄은 (표시명, 파트, URL) 셋으로 찾는다 — 같은 곡·파트에 링크가 둘일 수 있어 URL까지 봐야 한다.
+ * 바꾸는 것은 `검증` 칸 하나뿐이다. 켜는 것만이 아니라 끄는 것도 받는다 —
+ * 틀린 영상을 확인 처리한 실수를 폰에서 바로 되돌릴 수 있어야 한다.
+ */
+function verifyLink_(ss, payload) {
+  var 표시명 = String(payload['표시명'] || '').trim();
+  var 파트 = String(payload['파트'] || '').trim();
+  var URL = String(payload['URL'] || '').trim();
+  var 검증 = payload['검증'] !== false;
+  if (!표시명 || !파트 || !URL) return { ok: false, error: '표시명·파트·URL이 모두 있어야 합니다.' };
+
+  var sheet = ss.getSheetByName('practice_links');
+  if (!sheet) return { ok: false, error: 'practice_links 시트가 없습니다.' };
+  var headers = sheetHeaders_(sheet);
+  var nameCol = headers.indexOf('표시명');
+  var partCol = headers.indexOf('파트');
+  var urlCol = headers.indexOf('URL');
+  var verifiedCol = headers.indexOf('검증');
+  if (nameCol === -1 || partCol === -1 || urlCol === -1 || verifiedCol === -1) {
+    return { ok: false, error: 'practice_links 시트에 표시명/파트/URL/검증 열이 없습니다.' };
+  }
+
+  var lastRow = sheet.getLastRow();
+  var updated = 0;
+  if (lastRow >= 2) {
+    var values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    for (var r = 0; r < values.length; r++) {
+      if (String(values[r][nameCol]).trim() !== 표시명) continue;
+      if (String(values[r][partCol]).trim() !== 파트) continue;
+      if (String(values[r][urlCol]).trim() !== URL) continue;
+      sheet.getRange(r + 2, verifiedCol + 1).setValue(검증);
+      updated++;
+    }
+  }
+  if (!updated) {
+    return { ok: false, error: 'practice_links에서 그 줄을 찾지 못했습니다: ' + 표시명 + ' / ' + 파트 + '. 시트에서 URL이 바뀌었으면 새로고침하세요.' };
+  }
+  return { ok: true, updated: updated, 검증: 검증 };
 }
 
 /**
