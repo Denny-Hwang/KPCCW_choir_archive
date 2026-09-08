@@ -13,6 +13,7 @@ import { buildMonthlySummary, buildNotice } from '../lib/notice'
 import { seasonHintFor, titleOf } from '../lib/derive'
 import { formatKoreanTime, formatMonthDay, todayKey, weekdayOf } from '../lib/date'
 import { SongPicker } from '../components/SongPicker'
+import { SheetApply } from '../components/SheetApply'
 import { CopyBlock, Badge, Section } from '../components/ui'
 
 /**
@@ -20,7 +21,8 @@ import { CopyBlock, Badge, Section } from '../components/ui'
  *
  * 이 화면의 가치는 공지 자동 생성이 아니라 중복 선곡 방지다. 그래서 곡을 고르는
  * 자리에서 "마지막으로 부른 날"이 반드시 보여야 하고, 결과는 화면을 떠나기 전에
- * 붙여넣기 블록(§12.1)으로 손에 쥐어져야 한다. 앱은 시트에 쓰지 않는다.
+ * 손에 쥐어져야 한다 — "시트에 반영"(§12.2)으로 바로 쓰거나, 붙여넣기 블록(§12.1)으로.
+ * 붙여넣기 블록은 쓰기가 실패한 날의 폴백이므로 버튼이 있어도 남는다.
  */
 export default function Planner() {
   const { data, links, songs } = useArchive()
@@ -184,9 +186,13 @@ export default function Planner() {
         <CopyBlock text={summary} label="요약 복사" />
       </Section>
 
+      <Section title="시트에 반영">
+        <SheetApply plan={plan} songs={songs} />
+      </Section>
+
       <Section title="시트 붙여넣기 블록">
         <p className="mb-2 text-xs text-stone-500">
-          해당 시트의 <strong>마지막 행 다음 칸</strong>을 선택하고 붙여넣으세요.
+          위 버튼을 못 쓰거나 실패한 날이 있을 때. 해당 시트의 <strong>마지막 행 다음 칸</strong>을 선택하고 붙여넣으세요.
         </p>
         <div className="space-y-3">
           <PasteBlock title="services" columns={SERVICE_COLUMNS} text={servicePaste} />

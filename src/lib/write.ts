@@ -9,6 +9,7 @@
  */
 import { getEndpoint } from './api'
 import { parseDateKey } from './date'
+import type { PlannedDate } from './planner'
 import type { Rehearsal } from './types'
 
 export interface PlanPayload {
@@ -29,6 +30,17 @@ export type WriteResult =
       rehearsalsSkipped: number
     }
   | { ok: false; error: string }
+
+/**
+ * 선곡 화면(§6.7)의 한 달 계획 → 찬양일별 요청. 쓰기 엔드포인트는 한 번에 한 찬양일만 받는다.
+ * 곡이 없는 날은 뺀다 — 날짜만 있는 행을 시트에 남길 이유가 없다.
+ */
+export function planToPayloads(plan: PlannedDate[]): PlanPayload[] {
+  return [...plan]
+    .filter((d) => d.찬양일 && d.곡.length > 0)
+    .sort((a, b) => a.찬양일.localeCompare(b.찬양일))
+    .map((d) => ({ 찬양일: d.찬양일, 예배구분: d.예배구분.trim() || '주일', 곡: [...d.곡], rehearsals: d.rehearsals }))
+}
 
 export function buildWriteRequest(payload: PlanPayload, key: string): string {
   return JSON.stringify({ key, action: 'applyPlan', payload })
