@@ -240,7 +240,7 @@ export function PlanDialog({ song, onClose }: { song: Song; onClose: () => void 
                       type="password"
                       value={key}
                       onChange={(e) => setKey(e.target.value)}
-                      placeholder="시트 메뉴 [성가 아카이브 > 앱 편집 키 설정]의 키"
+                      placeholder="config 시트의 앱편집키 값 (대소문자 무관)"
                       className="field"
                       autoComplete="off"
                       disabled={busy}
