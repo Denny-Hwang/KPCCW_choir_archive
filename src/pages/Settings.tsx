@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { clearCache, getEndpoint, setEndpoint } from '../lib/api'
+import { clearCache, getEndpoint, getWriteKey, setEndpoint, setWriteKey } from '../lib/api'
 import { useArchive } from '../lib/useArchive'
 import { brokenLinks } from '../lib/derive'
 import { Badge, Section } from '../components/ui'
@@ -9,12 +9,14 @@ import { Badge, Section } from '../components/ui'
  *
  * Apps Script 읽기 URL은 저장소에 있어도 되지만(§13.3 — 데이터에 개인정보가 없다),
  * 재배포 없이 고칠 수 있어야 해서 여기서 덮어쓸 수 있게 한다. 값은 이 브라우저에만 남는다.
- * §12.2 쓰기 공유 키는 여기에 넣지 않는다 — 앱은 시트에 쓰지 않는다.
+ * §12.2 편집 키도 같은 자리에 둔다 — 저장소에는 절대 넣지 않고, 이 브라우저에만 남는다.
  */
 export default function Settings() {
   const { data, origin, fetchedAt, error, reload } = useArchive()
   const [url, setUrl] = useState(getEndpoint())
   const [saved, setSaved] = useState(false)
+  const [writeKey, setWriteKeyInput] = useState(getWriteKey())
+  const [keySaved, setKeySaved] = useState(false)
 
   const broken = brokenLinks(data.practiceLinks)
   const unverifiedLinks = data.practiceLinks.filter((l) => !l.검증)
@@ -72,6 +74,50 @@ export default function Settings() {
             {fetchedAt && <Badge>받은 시각 {fetchedAt.slice(0, 16).replace('T', ' ')}</Badge>}
           </div>
           {error && <p className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</p>}
+        </div>
+      </Section>
+
+      <Section title="편집 키 (다음 찬양으로)">
+        <div className="card space-y-3 p-4">
+          <div>
+            <label className="label" htmlFor="write-key">편집 키</label>
+            <input
+              id="write-key"
+              type="password"
+              value={writeKey}
+              onChange={(e) => setWriteKeyInput(e.target.value)}
+              placeholder="시트 메뉴 [성가 아카이브 > 앱 편집 키 설정]에서 정한 키"
+              className="field mt-1"
+              autoComplete="off"
+            />
+            <p className="mt-1 text-xs text-stone-400">
+              곡 화면의 &lsquo;다음 찬양으로&rsquo;가 시트에 쓸 때 씁니다. 이 브라우저에만 저장되고, 없으면 붙여넣기 블록만 나옵니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setWriteKey(writeKey)
+                setKeySaved(true)
+                window.setTimeout(() => setKeySaved(false), 2000)
+              }}
+              className="btn-primary"
+            >
+              {keySaved ? '저장됨' : '저장'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setWriteKeyInput('')
+                setWriteKey('')
+              }}
+              className="btn-ghost"
+            >
+              지우기
+            </button>
+            <Badge tone={getWriteKey() ? 'ok' : 'neutral'}>{getWriteKey() ? '키 저장됨' : '키 없음'}</Badge>
+          </div>
         </div>
       </Section>
 

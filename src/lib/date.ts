@@ -55,6 +55,14 @@ export function formatKoreanTime(hhmm: string): string {
   return minute === 0 ? `${h12}시` : `${h12}시 ${minute}분`
 }
 
+/** 두 날짜 사이의 일수 (to - from). 홈의 "N일 남음" 표시용. */
+export function daysBetween(fromKey: string, toKey: string): number | null {
+  const from = parseDateKey(fromKey)
+  const to = parseDateKey(toKey)
+  if (!from || !to) return null
+  return Math.round((to.getTime() - from.getTime()) / 86_400_000)
+}
+
 /** 두 날짜 사이의 개월 수 (중복 경고 판정용, §6.7). */
 export function monthsBetween(fromKey: string, toKey: string): number | null {
   const from = parseDateKey(fromKey)

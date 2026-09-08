@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildCandidates, filterCandidates, EMPTY_FILTER, initialPlan, parseRehearsalPattern, planDifficultyLoad, suggestRehearsals } from './planner'
+import { buildCandidates, filterCandidates, EMPTY_FILTER, initialPlan, nextServiceDate, parseRehearsalPattern, planDifficultyLoad, suggestRehearsals } from './planner'
 import { buildRehearsalPaste, buildServicePaste, findDuplicateServiceDates } from './paste'
 import { DEFAULT_CONFIG } from './schema'
 import { linkIndex, pickFeaturedService, songUsage, sungHistory, totalAttendance } from './derive'
-import { nthWeekdayOfMonth, previousWeekday, sundaysInMonth } from './date'
+import { daysBetween, nthWeekdayOfMonth, previousWeekday, sundaysInMonth } from './date'
 import type { ArchiveData, PracticeLink, Service, Song } from './types'
 
 function song(partial: Partial<Song>): Song {
@@ -109,6 +109,44 @@ describe('initialPlan', () => {
   it('찬양주일이 0이면 그 달의 모든 주일을 만든다', () => {
     const plan = initialPlan(2026, 10, { ...DEFAULT_CONFIG, 찬양주일: 0 })
     expect(plan.map((p) => p.찬양일)).toEqual(['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25'])
+  })
+})
+
+describe('nextServiceDate (다음 찬양으로의 기본 찬양일)', () => {
+  it('이번 달 넷째 주일이 아직 남았고 비어 있으면 그 날', () => {
+    expect(nextServiceDate('2026-09-08', DEFAULT_CONFIG, [])).toBe('2026-09-27')
+  })
+
+  it('이번 달 찬양에 이미 곡이 있으면 다음 달로 넘어간다', () => {
+    expect(nextServiceDate('2026-09-08', DEFAULT_CONFIG, [service('2026-09-27', ['가곡 (중47-01)'])])).toBe('2026-10-25')
+  })
+
+  it('날짜만 있고 곡이 없는 행은 비어 있는 것으로 본다', () => {
+    expect(nextServiceDate('2026-09-08', DEFAULT_CONFIG, [service('2026-09-27', [])])).toBe('2026-09-27')
+  })
+
+  it('찬양일이 지났으면(당일 포함) 다음 달', () => {
+    expect(nextServiceDate('2026-09-27', DEFAULT_CONFIG, [])).toBe('2026-10-25')
+    expect(nextServiceDate('2026-09-28', DEFAULT_CONFIG, [])).toBe('2026-10-25')
+  })
+
+  it('연말을 넘긴다', () => {
+    expect(nextServiceDate('2026-12-28', DEFAULT_CONFIG, [])).toBe('2027-01-24')
+  })
+
+  it('찬양주일이 0이면 다음 주일', () => {
+    expect(nextServiceDate('2026-09-08', { ...DEFAULT_CONFIG, 찬양주일: 0 }, [])).toBe('2026-09-13')
+    expect(nextServiceDate('2026-09-08', { ...DEFAULT_CONFIG, 찬양주일: 0 }, [service('2026-09-13', ['가곡 (중47-01)'])])).toBe(
+      '2026-09-20',
+    )
+  })
+})
+
+describe('daysBetween', () => {
+  it('남은 일수를 센다', () => {
+    expect(daysBetween('2026-09-08', '2026-09-27')).toBe(19)
+    expect(daysBetween('2026-09-08', '2026-09-08')).toBe(0)
+    expect(daysBetween('2026-09-08', '')).toBeNull()
   })
 })
 

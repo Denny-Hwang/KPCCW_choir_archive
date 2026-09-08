@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { formatMonthDay } from '../lib/date'
 import { songPath } from '../lib/derive'
 import type { SongCandidate } from '../lib/planner'
 import { Badge, UnverifiedBadge } from './ui'
@@ -36,15 +35,16 @@ export function SongMeta({ candidate }: { candidate: SongCandidate }) {
   )
 }
 
-export function SongRow({ candidate }: { candidate: SongCandidate }) {
-  const { song, lastSung } = candidate
+/**
+ * 곡 목록 한 줄. 줄 전체가 상세로 가는 링크이고, 오른쪽에 "다음 찬양으로"가 따로 붙는다 (§12.2).
+ * 마지막으로 부른 날은 아래 배지에 이미 있어 제목 줄에서는 뺐다 — 버튼 자리가 필요하다.
+ */
+export function SongRow({ candidate, onPlan }: { candidate: SongCandidate; onPlan?: () => void }) {
+  const { song } = candidate
   return (
-    <li className={`px-4 py-3 ${song.검증 ? '' : 'opacity-60'}`}>
-      <Link to={songPath(song)} className="block">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="font-semibold">{song.제목 || song.표시명}</p>
-          {lastSung && <span className="shrink-0 text-xs text-stone-400">마지막 {formatMonthDay(lastSung)}</span>}
-        </div>
+    <li className={`flex items-center gap-2 px-4 py-3 ${song.검증 ? '' : 'opacity-60'}`}>
+      <Link to={songPath(song)} className="block min-w-0 flex-1">
+        <p className="font-semibold">{song.제목 || song.표시명}</p>
         {(song.작곡 || song.편곡 || song.원제) && (
           <p className="truncate text-xs text-stone-500">
             {[song.원제, song.작곡 && `작곡 ${song.작곡}`, song.편곡 && `편곡 ${song.편곡}`].filter(Boolean).join(' · ')}
@@ -52,6 +52,11 @@ export function SongRow({ candidate }: { candidate: SongCandidate }) {
         )}
         <SongMeta candidate={candidate} />
       </Link>
+      {onPlan && (
+        <button type="button" onClick={onPlan} className="btn-ghost shrink-0 px-2.5 py-1.5 text-xs" aria-label={`${song.제목 || song.표시명} 다음 찬양으로`}>
+          다음 찬양으로
+        </button>
+      )}
     </li>
   )
 }
