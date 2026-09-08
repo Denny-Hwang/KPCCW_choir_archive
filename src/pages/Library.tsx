@@ -3,12 +3,18 @@ import { useArchive } from '../lib/useArchive'
 import { buildCandidates, filterCandidates, EMPTY_FILTER, type CandidateFilter } from '../lib/planner'
 import { todayKey } from '../lib/date'
 import { SongRow } from '../components/SongRow'
+import { PlanDialog } from '../components/PlanDialog'
 import { Empty, Spinner } from '../components/ui'
+import type { Song } from '../lib/types'
 
-/** 곡 라이브러리 (§6.3). 검색 + 악보집/절기/성부/상태/난이도/검증 필터. */
+/**
+ * 곡 라이브러리 (§6.3). 검색 + 악보집/절기/성부/상태/난이도/검증 필터.
+ * 각 줄의 "다음 찬양으로"가 그 곡을 다음 찬양일에 바로 넣는다 (§12.2).
+ */
 export default function Library() {
   const { data, loading, links } = useArchive()
   const [filter, setFilter] = useState<CandidateFilter>(EMPTY_FILTER)
+  const [planning, setPlanning] = useState<Song | null>(null)
 
   const candidates = useMemo(() => buildCandidates(data, todayKey(), links), [data, links])
   const visible = useMemo(() => filterCandidates(candidates, filter), [candidates, filter])
@@ -79,7 +85,7 @@ export default function Library() {
       {visible.length ? (
         <ul className="card divide-y divide-stone-100">
           {visible.map((c) => (
-            <SongRow key={`${c.song.곡코드}-${c.song.표시명}`} candidate={c} />
+            <SongRow key={`${c.song.곡코드}-${c.song.표시명}`} candidate={c} onPlan={() => setPlanning(c.song)} />
           ))}
         </ul>
       ) : (
@@ -88,6 +94,8 @@ export default function Library() {
           hint={data.songs.length ? '필터를 넓혀 보세요.' : undefined}
         />
       )}
+
+      {planning && <PlanDialog song={planning} onClose={() => setPlanning(null)} />}
     </div>
   )
 }

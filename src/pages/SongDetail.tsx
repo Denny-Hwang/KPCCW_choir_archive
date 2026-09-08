@@ -1,16 +1,18 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { songUsage } from '../lib/derive'
 import { formatLongDate, todayKey } from '../lib/date'
 import { PartLinkList } from '../components/PartLinks'
+import { PlanDialog } from '../components/PlanDialog'
 import { Badge, Empty, Section, Spinner, UnverifiedBadge } from '../components/ui'
 
-/** 곡 상세 (§6.5). 메타데이터 + 파트별 영상 + 이 곡을 부른 날짜 이력. */
+/** 곡 상세 (§6.5). 메타데이터 + 파트별 영상 + 이 곡을 부른 날짜 이력 + "다음 찬양으로". */
 export default function SongDetail() {
   const { songCode } = useParams()
   const navigate = useNavigate()
   const { data, loading, links, history } = useArchive()
+  const [planning, setPlanning] = useState(false)
 
   const song = useMemo(() => {
     const key = decodeURIComponent(songCode ?? '')
@@ -66,6 +68,11 @@ export default function SongDetail() {
           {usage.recent && <Badge tone="danger">최근 {usage.monthsAgo}개월 내 부름</Badge>}
         </div>
 
+        {/* 총무·지휘자가 곡을 보다가 바로 정한다. 찬양일·연습 일정은 다음 창에서 (§12.2). */}
+        <button type="button" onClick={() => setPlanning(true)} className="btn-primary mt-4 w-full">
+          다음 찬양으로
+        </button>
+
         {(song.악보스캔URL || song.참고음원URL || song.비고) && (
           <div className="mt-3 space-y-1 border-t border-stone-100 pt-3 text-xs text-stone-600">
             {song.악보스캔URL && (
@@ -104,6 +111,8 @@ export default function SongDetail() {
           <p className="text-sm text-stone-400">아직 부른 기록이 없습니다.</p>
         )}
       </Section>
+
+      {planning && <PlanDialog song={song} onClose={() => setPlanning(false)} />}
     </div>
   )
 }

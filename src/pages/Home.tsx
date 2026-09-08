@@ -2,13 +2,18 @@ import { Link } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { buildNotice, noticeWarnings } from '../lib/notice'
 import { buildServiceView, pickFeaturedService, songPath, totalAttendance } from '../lib/derive'
-import { formatKoreanTime, formatLongDate, formatMonthDay, monthKey, todayKey } from '../lib/date'
+import { daysBetween, formatKoreanTime, formatLongDate, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
+import type { Rehearsal } from '../lib/types'
 import { PartLinks } from '../components/PartLinks'
 import { CopyBlock, Empty, RecordingButton, Section, Spinner } from '../components/ui'
 
 /**
  * 홈 — 다가오는 찬양일 (§6.1).
  * 대원 입장에서 필요한 건 사실상 이 화면뿐이다. 곡, 연습 일정, 파트 버튼, 공지 복사.
+ *
+ * 다음 찬양이 시트에 있으면 그것을, 없으면 가장 최근 찬양을 보여준다. 지난 기록은
+ * 아카이브에 다 있으므로 여기서 앞자리를 차지할 이유가 없다. 연습 일정은 곡 바로 아래에
+ * 함께 둔다 — "다음 연습이 언제지"가 이 화면을 여는 두 번째 이유다.
  */
 export default function Home() {
   const { data, loading, songs, rehearsals } = useArchive()
@@ -34,6 +39,7 @@ export default function Home() {
   })
   const warnings = noticeWarnings(view.songs)
   const upcoming = featured.찬양일 >= today
+  const daysLeft = upcoming ? daysBetween(today, featured.찬양일) : null
 
   // 다가오는 찬양이면 이후 3개를 가까운 순으로, 지나간 것뿐이면 직전 3개를 최근 순으로.
   // (양쪽 다 오름차순으로 자르면 지난 찬양에서 가장 오래된 것이 올라온다.)
@@ -46,12 +52,25 @@ export default function Home() {
     <div className="space-y-6">
       <div className="card overflow-hidden">
         <div className="bg-stone-800 px-4 py-3 text-white">
-          <p className="text-xs opacity-70">{upcoming ? '다가오는 찬양' : '가장 최근 찬양'}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs opacity-70">{upcoming ? '다가오는 찬양' : '가장 최근 찬양'}</p>
+            {daysLeft != null && (
+              <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold">
+                {daysLeft === 0 ? '오늘' : `${daysLeft}일 남음`}
+              </span>
+            )}
+          </div>
           <p className="text-lg font-extrabold">{formatLongDate(featured.찬양일)}</p>
           {featured.예배구분 && <p className="text-xs opacity-80">{featured.예배구분}</p>}
         </div>
 
         <div className="space-y-4 p-4">
+          {!upcoming && (
+            <p className="rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-500">
+              다음 찬양은 아직 정해지지 않았습니다. 정해지면 여기에 나타납니다.
+            </p>
+          )}
+
           {view.songs.length ? (
             view.songs.map((song, i) => (
               <div key={song.표시명} className="space-y-2">
@@ -73,19 +92,7 @@ export default function Home() {
             <p className="text-sm text-stone-400">선곡이 아직 입력되지 않았습니다.</p>
           )}
 
-          {view.rehearsals.length > 0 && (
-            <div className="rounded-xl bg-stone-50 p-3">
-              <p className="mb-1 text-xs font-bold text-stone-500">{data.config.공지_연습헤더}</p>
-              <ul className="space-y-0.5 text-sm">
-                {view.rehearsals.map((r) => (
-                  <li key={`${r.연습일}-${r.시각}`}>
-                    {formatMonthDay(r.연습일)} {r.구분} {formatKoreanTime(r.시각)}
-                    {r.장소 && <span className="text-stone-400"> · {r.장소}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <RehearsalSchedule rehearsals={view.rehearsals} today={today} upcoming={upcoming} header={data.config.공지_연습헤더} />
 
           {view.total != null && (
             <p className="text-xs text-stone-500">
@@ -156,6 +163,52 @@ export default function Home() {
         </Section>
       )}
 
+    </div>
+  )
+}
+
+/**
+ * 연습 일정. 다가오는 찬양이면 다음 연습을 굵게, 지난 연습은 흐리게.
+ * 지난 찬양에는 일정이 있을 때만 그린다 — 끝난 일정을 "없음"이라고 말할 이유가 없다.
+ */
+function RehearsalSchedule({
+  rehearsals,
+  today,
+  upcoming,
+  header,
+}: {
+  rehearsals: Rehearsal[]
+  today: string
+  upcoming: boolean
+  header: string
+}) {
+  if (!rehearsals.length && !upcoming) return null
+  const next = rehearsals.find((r) => r.연습일 >= today)
+  return (
+    <div className="rounded-xl bg-stone-50 p-3">
+      <p className="mb-1 text-xs font-bold text-stone-500">{header}</p>
+      {rehearsals.length ? (
+        <ul className="space-y-0.5 text-sm">
+          {rehearsals.map((r) => {
+            const past = upcoming && r.연습일 < today
+            const isNext = upcoming && next === r
+            return (
+              <li
+                key={`${r.연습일}-${r.시각}`}
+                className={`flex flex-wrap items-center gap-x-1.5 ${past ? 'text-stone-400 line-through' : ''} ${isNext ? 'font-bold' : ''}`}
+              >
+                <span>
+                  {formatMonthDay(r.연습일)} ({weekdayOf(r.연습일)}) {r.구분} {formatKoreanTime(r.시각)}
+                </span>
+                {r.장소 && <span className="font-normal text-stone-400">· {r.장소}</span>}
+                {isNext && <span className="chip bg-stone-800 text-[10px] text-white">다음 연습</span>}
+              </li>
+            )
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-stone-400">연습 일정이 아직 등록되지 않았습니다.</p>
+      )}
     </div>
   )
 }

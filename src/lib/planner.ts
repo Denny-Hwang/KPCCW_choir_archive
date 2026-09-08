@@ -6,7 +6,7 @@
  */
 import { nthWeekdayOfMonth, previousWeekday, sundaysInMonth } from './date'
 import { songUsage, sungHistory } from './derive'
-import type { AppConfig, ArchiveData, PracticeLink, Rehearsal, Song } from './types'
+import type { AppConfig, ArchiveData, PracticeLink, Rehearsal, Service, Song } from './types'
 
 export interface PlannedDate {
   id: string
@@ -97,6 +97,32 @@ export function initialPlan(year: number, month: number, config: AppConfig, 예�
     곡: [],
     rehearsals: suggestRehearsals(찬양일, patterns),
   }))
+}
+
+/**
+ * "다음 찬양으로"가 기본으로 잡는 찬양일.
+ *
+ * 오늘 이후의 찬양주일(기본 넷째 주일) 중, 시트에 아직 곡이 없는 첫 날이다.
+ * 이번 달 넷째 주일이 아직 안 지났는데 곡이 비어 있으면 그 날이고, 이미 곡이 있으면
+ * 다음 달로 넘어간다. 곡 없이 날짜만 있는 행은 비어 있는 것으로 본다 — 채우면 된다.
+ * 찬양주일이 0이면 매주 부르는 교회이므로 다음 주일이다.
+ */
+export function nextServiceDate(today: string, config: AppConfig, services: Service[]): string {
+  const taken = new Set(services.filter((s) => s.곡.length > 0).map((s) => s.찬양일))
+  const m = today.match(/^(\d{4})-(\d{2})/)
+  if (!m) return today
+  const startYear = Number(m[1])
+  const startMonth = Number(m[2])
+  const nth = config.찬양주일
+  for (let i = 0; i < 24; i++) {
+    const month = ((startMonth - 1 + i) % 12) + 1
+    const year = startYear + Math.floor((startMonth - 1 + i) / 12)
+    const dates = nth >= 1 && nth <= 5 ? [nthWeekdayOfMonth(year, month, 0, nth)] : sundaysInMonth(year, month)
+    for (const date of dates) {
+      if (date > today && !taken.has(date)) return date
+    }
+  }
+  return today
 }
 
 export interface SongCandidate {

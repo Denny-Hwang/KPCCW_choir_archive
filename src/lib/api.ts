@@ -10,6 +10,7 @@ import type { ArchiveData, RawPayload } from './types'
 
 const CACHE_KEY = 'kpccw.archive.cache.v1'
 const ENDPOINT_KEY = 'kpccw.archive.endpoint'
+const WRITE_KEY = 'kpccw.archive.writeKey'
 
 /**
  * 배포된 Apps Script 읽기 엔드포인트.
@@ -46,6 +47,20 @@ export function setEndpoint(url: string): void {
   const trimmed = url.trim()
   if (trimmed) safeSet(ENDPOINT_KEY, trimmed)
   else safeRemove(ENDPOINT_KEY)
+}
+
+/**
+ * §12.2 편집 키. 사용자가 한 번 입력하면 이 브라우저에만 남는다 —
+ * 저장소·빌드 산출물 어디에도 넣지 않는다 (§13.3). 없으면 앱은 시트에 쓰지 않는다.
+ */
+export function getWriteKey(): string {
+  return safeGet(WRITE_KEY)
+}
+
+export function setWriteKey(key: string): void {
+  const trimmed = key.trim()
+  if (trimmed) safeSet(WRITE_KEY, trimmed)
+  else safeRemove(WRITE_KEY)
 }
 
 export function readCache(): { payload: RawPayload; fetchedAt: string } | null {
