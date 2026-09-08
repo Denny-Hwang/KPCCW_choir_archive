@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWriteRequest, parseWriteResponse, validatePlan, type PlanPayload } from './write'
+import { buildWriteRequest, parseWriteResponse, planToPayloads, validatePlan, type PlanPayload } from './write'
 
 const payload: PlanPayload = {
   찬양일: '2026-10-25',
@@ -28,6 +28,21 @@ describe('validatePlan', () => {
   it('찬양일 이후의 연습일을 잡아낸다', () => {
     // 찬양일을 바꾸면 기본 패턴이 그대로 남아 뒤에 오는 일이 있다.
     expect(validatePlan({ ...payload, 찬양일: '2026-10-11' })).toContain('찬양일 이후의 연습일이 있습니다.')
+  })
+})
+
+describe('planToPayloads', () => {
+  it('곡이 있는 날만 날짜순으로, 예배구분이 비면 주일', () => {
+    const r = { 연습일: '2026-10-11', 시각: '13:30', 구분: '주일', 장소: '' }
+    const out = planToPayloads([
+      { id: 'b', 찬양일: '2026-10-25', 예배구분: '  ', 곡: ['a'], rehearsals: [r] },
+      { id: 'empty', 찬양일: '2026-10-18', 예배구분: '주일', 곡: [], rehearsals: [] },
+      { id: 'a', 찬양일: '2026-10-04', 예배구분: '특별예배', 곡: ['b', 'c'], rehearsals: [] },
+    ])
+    expect(out).toEqual([
+      { 찬양일: '2026-10-04', 예배구분: '특별예배', 곡: ['b', 'c'], rehearsals: [] },
+      { 찬양일: '2026-10-25', 예배구분: '주일', 곡: ['a'], rehearsals: [r] },
+    ])
   })
 })
 
