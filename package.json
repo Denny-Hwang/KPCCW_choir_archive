@@ -12,7 +12,11 @@
     "test:watch": "vitest",
     "verify": "node scripts/run.mjs",
     "find-recordings": "node scripts/find-recordings.mjs",
-    "icons": "node scripts/render-icons.mjs"
+    "icons": "node scripts/render-icons.mjs",
+    "og": "RUN_ENTRY=scripts/og-tags.ts node scripts/run.mjs",
+    "gas:login": "npx --yes @google/clasp@2.4.2 login",
+    "gas:push": "npx --yes @google/clasp@2.4.2 push",
+    "gas:deploy": "npx --yes @google/clasp@2.4.2 push && npx --yes @google/clasp@2.4.2 deploy --deploymentId \"$GAS_DEPLOYMENT_ID\" --description \"npm run gas:deploy\""
   },
   "dependencies": {
     "react": "^18.3.1",

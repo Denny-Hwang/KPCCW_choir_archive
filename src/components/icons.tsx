@@ -134,3 +134,26 @@ export function PlannerTabIcon(props: IconProps) {
     </Svg>
   )
 }
+
+export function ChecklistIcon(props: IconProps) {
+  return <PlannerTabIcon {...props} />
+}
+
+export function CheckCircleIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9.5" fill="currentColor" />
+      <path d="m7.5 12.2 3 3 6-6.2" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  )
+}
+
+export function AlertCircleIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9.5" fill="currentColor" />
+      <path d="M12 7v6.5" stroke="white" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="12" cy="16.8" r="1.4" fill="white" />
+    </Svg>
+  )
+}

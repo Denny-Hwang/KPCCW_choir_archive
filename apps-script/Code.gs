@@ -53,6 +53,9 @@ function buildPayload_() {
   var sheetNames = resolveDataSheets_(ss);
 
   var payload = { updatedAt: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ssXXX") };
+  // 편집 키가 공개된 기본값(selah) 그대로인지만 알린다. 키 자체는 내보내지 않는다.
+  // 기본값은 README에 적혀 있으니, 이 사실을 알리는 것으로 새는 것은 없다.
+  payload.writeKeyIsDefault = expectedWriteKey_(ss) === WRITE_KEY_DEFAULT;
 
   for (var i = 0; i < sheetNames.length; i++) {
     var name = sheetNames[i];
@@ -92,7 +95,8 @@ function resolveDataSheets_(ss) {
 }
 
 /** config 시트에 있지만 GET 응답에는 절대 넣지 않는 키. 앱을 여는 누구나 그 응답을 본다. */
-var CONFIG_SECRET_KEYS = ['앱편집키'];
+// 알림메일은 개인 메일 주소라 내보내지 않는다.
+var CONFIG_SECRET_KEYS = ['앱편집키', '알림메일'];
 
 /**
  * 헤더 행의 이름을 키로 쓴다 (§원칙). 열 위치에 의존하지 않으므로
@@ -182,6 +186,10 @@ function onOpen() {
     .addItem('악보집 등록 (한 권)', 'registerBookPrompt')
     .addItem('곡명 정리 (파트 꼬리 떼기)', 'repairSongTitles')
     .addSeparator()
+    .addItem('주간 자동 점검 켜기', 'installWeeklyCheck')
+    .addItem('주간 자동 점검 지금 실행', 'runWeeklyCheckNow')
+    .addItem('주간 자동 점검 끄기', 'removeWeeklyCheck')
+    .addSeparator()
     .addItem('엔드포인트 점검', 'validateData')
     .addItem('캐시 비우기', 'clearCache')
     .addToUi();
@@ -240,10 +248,13 @@ function doPost(e) {
 
 function handleWrite_(body) {
   var ss = getSpreadsheet_();
-  if (normalizeWriteKey_(body && body.key) !== expectedWriteKey_(ss)) {
-    return { ok: false, error: '편집 키가 맞지 않습니다. config 시트의 앱편집키 값을 확인하세요.' };
-  }
   var action = body && body.action;
+  if (normalizeWriteKey_(body && body.key) !== expectedWriteKey_(ss)) {
+    // 키가 틀린 시도도 남긴다. 누가 키를 맞히려 하는지는 여기서만 보인다.
+    var denied = { ok: false, error: '편집 키가 맞지 않습니다. config 시트의 앱편집키 값을 확인하세요.' };
+    logChange_(ss, body, denied);
+    return denied;
+  }
   if (action !== 'applyPlan' && action !== 'verifyLink' && action !== 'addLink') {
     return { ok: false, error: '알 수 없는 요청입니다: ' + String(action) };
   }
@@ -255,11 +266,63 @@ function handleWrite_(body) {
   }
   try {
     var payload = body.payload || {};
-    if (action === 'verifyLink') return verifyLink_(ss, payload);
-    if (action === 'addLink') return addLink_(ss, payload);
-    return applyPlan_(ss, payload);
+    var result;
+    if (action === 'verifyLink') result = verifyLink_(ss, payload);
+    else if (action === 'addLink') result = addLink_(ss, payload);
+    else result = applyPlan_(ss, payload);
+    logChange_(ss, body, result);
+    return result;
   } finally {
     lock.releaseLock();
+  }
+}
+
+var CHANGE_LOG_SHEET = '_변경기록';
+var CHANGE_LOG_HEADERS = ['시각', '편집자', '동작', '내용', '결과'];
+
+/**
+ * 앱이 시트에 쓴 것을 한 줄씩 남긴다 — 누가, 언제, 무엇을.
+ *
+ * 편집 키는 여럿이 함께 쓰는 키 하나라, 이것이 없으면 "이 곡 누가 넣었지?"에 답할 수 없다.
+ * 편집자는 앱에서 키를 넣을 때 함께 적은 이름이다(로그인이 없으므로 본인이 밝힌 이름이다).
+ * 기록이 실패해도 쓰기 자체는 성공으로 돌려준다 — 기록 때문에 선곡이 막히면 안 된다.
+ */
+function logChange_(ss, body, result) {
+  try {
+    var sheet = ss.getSheetByName(CHANGE_LOG_SHEET);
+    if (!sheet) {
+      sheet = ss.insertSheet(CHANGE_LOG_SHEET);
+      sheet.getRange(1, 1, 1, CHANGE_LOG_HEADERS.length).setValues([CHANGE_LOG_HEADERS]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+    }
+    var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
+    var editor = String((body && body.editor) || '').trim().slice(0, 40) || '(이름 없음)';
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, CHANGE_LOG_HEADERS.length).setValues([[
+      Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss'),
+      editor,
+      String((body && body.action) || ''),
+      describeChange_(body),
+      result && result.ok ? '성공' : '실패 — ' + String((result && result.error) || '')
+    ]]);
+  } catch (e) {
+    // 기록 실패는 삼킨다.
+  }
+}
+
+/** 사람이 읽을 한 줄. 편집 키는 절대 남기지 않는다. */
+function describeChange_(body) {
+  var p = (body && body.payload) || {};
+  switch (body && body.action) {
+    case 'applyPlan':
+      return String(p['찬양일'] || '') + ' ' + String(p['예배구분'] || '') + ' — ' +
+        (Array.isArray(p['곡']) ? p['곡'].join(' / ') : '') +
+        (Array.isArray(p['rehearsals']) && p['rehearsals'].length ? ' · 연습 ' + p['rehearsals'].length + '회' : '');
+    case 'verifyLink':
+      return String(p['표시명'] || '') + ' / ' + String(p['파트'] || '') + ' → ' + (p['검증'] === false ? '확인 취소' : '확인');
+    case 'addLink':
+      return String(p['표시명'] || '') + ' / ' + String(p['파트'] || '') + ' ← ' + String(p['URL'] || '');
+    default:
+      return '';
   }
 }
 

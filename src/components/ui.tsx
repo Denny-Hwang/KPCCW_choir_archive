@@ -42,13 +42,25 @@ export function Section({ title, action, children }: { title: string; action?: R
  * 복사 버튼. 클립보드 API가 막힌 환경(iOS 사파리 등)에서는 텍스트 영역을 펼쳐
  * 수동 복사를 유도한다 (§7.2).
  */
-export function CopyBlock({ text, label, className = '' }: { text: string; label: string; className?: string }) {
+export function CopyBlock({
+  text,
+  label,
+  className = '',
+  onCopied,
+}: {
+  text: string
+  label: string
+  className?: string
+  /** 클립보드에 들어갔거나, 손으로 복사하려고 텍스트를 펼쳤을 때. */
+  onCopied?: () => void
+}) {
   const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle')
 
   async function handleCopy() {
     if (!text) return
     const ok = await copyText(text)
     setState(ok ? 'copied' : 'manual')
+    onCopied?.()
     if (ok) window.setTimeout(() => setState('idle'), 2000)
   }
 

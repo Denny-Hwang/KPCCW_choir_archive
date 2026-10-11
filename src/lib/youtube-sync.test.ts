@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createContext, runInContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import { GS_FILES } from './gs-files'
 
 /**
  * Apps Script의 제목·재생목록명 파서를 실제 채널 데이터로 잡아 둔다.
@@ -21,7 +22,7 @@ function loadSync(): Record<string, any> {
     }
   }
   createContext(sandbox)
-  for (const file of ['Code.gs', 'Setup.gs', 'YouTubeSync.gs']) {
+  for (const file of GS_FILES) {
     runInContext(readFileSync(new URL('../../apps-script/' + file, import.meta.url), 'utf8'), sandbox)
   }
   return sandbox
@@ -233,7 +234,7 @@ describe('buildLinkRow_', () => {
  * 이름 뒤 밑줄이 내부 헬퍼 규약이므로, 그 호출이 전부 어딘가에 정의돼 있는지만 본다.
  */
 describe('.gs 내부 헬퍼', () => {
-  const files = ['Code.gs', 'Setup.gs', 'YouTubeSync.gs']
+  const files = GS_FILES
   const sources = files.map((f) => ({
     file: f,
     src: readFileSync(new URL('../../apps-script/' + f, import.meta.url), 'utf8')

@@ -5,7 +5,8 @@ import { buildServiceView, pickFeaturedService, songPath, totalAttendance } from
 import { daysBetween, formatKoreanTime, formatLongDate, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
 import type { Rehearsal } from '../lib/types'
 import { PartLinks } from '../components/PartLinks'
-import { PlayIcon } from '../components/icons'
+import { ChecklistIcon, PlayIcon } from '../components/icons'
+import { markNoticeCopied } from '../lib/api'
 import { youtubeSearchUrl } from '../lib/youtube'
 import { CopyBlock, Empty, RecordingButton, Section, Spinner } from '../components/ui'
 
@@ -130,7 +131,12 @@ export default function Home() {
             ))}
           </ul>
         )}
-        <CopyBlock text={notice} label="공지 복사" />
+        <CopyBlock text={notice} label="공지 복사" onCopied={() => markNoticeCopied(featured.찬양일)} />
+        {/* 총무·지휘자용. 대원에게는 의미 없는 화면이라 탭에 두지 않고 여기서 연다. */}
+        <Link to="/ready" className="mt-3 flex items-center gap-1.5 text-sm text-stone-500 underline underline-offset-2">
+          <ChecklistIcon className="h-5 w-5" />
+          이번 주 준비 상태 (총무·지휘자)
+        </Link>
       </Section>
 
       {others.length > 0 && (

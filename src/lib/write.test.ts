@@ -8,6 +8,7 @@ import {
   parseWriteResponse,
   planToPayloads,
   validatePlan,
+  withEditor,
   type PlanPayload,
 } from './write'
 
@@ -127,5 +128,16 @@ describe('addLink 요청·응답', () => {
       URL: 'https://youtu.be/AbCdEfGhIjK',
     })
     expect(parseAddLinkResponse('{"ok":false,"error":"없는 곡"}')).toEqual({ ok: false, error: '없는 곡' })
+  })
+})
+
+describe('withEditor', () => {
+  it('이름이 있으면 본문에 editor로 붙인다', () => {
+    const body = buildVerifyRequest({ 표시명: '가', 파트: '합창', URL: 'u', 검증: true }, 'k')
+    expect(JSON.parse(withEditor(body, ' 김총무 '))).toMatchObject({ key: 'k', action: 'verifyLink', editor: '김총무' })
+  })
+
+  it('이름이 없으면 본문을 그대로 둔다', () => {
+    expect(withEditor('{"a":1}', '  ')).toBe('{"a":1}')
   })
 })

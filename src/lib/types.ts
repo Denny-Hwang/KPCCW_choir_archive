@@ -121,6 +121,8 @@ export interface ArchiveData {
   rehearsals: Rehearsal[]
   practiceLinks: PracticeLink[]
   config: AppConfig
+  /** 편집 키가 공개된 기본값(selah) 그대로인가. 관리자 화면에서 바꾸라고 알린다. */
+  writeKeyIsDefault?: boolean
 }
 
 /** Apps Script가 내려주는 원본 형태 (한글 헤더 키, 값은 문자열/숫자/불리언 혼재). */
@@ -135,4 +137,5 @@ export interface RawPayload {
   practiceLinks?: RawRow[]
   practice_links?: RawRow[]
   config?: RawRow[] | Record<string, unknown>
+  writeKeyIsDefault?: unknown
 }

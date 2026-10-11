@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { clearCache, getEndpoint, getWriteKey, setEndpoint, setWriteKey } from '../lib/api'
+import { clearCache, getEditorName, getEndpoint, getWriteKey, setEditorName, setEndpoint, setWriteKey } from '../lib/api'
 import { useArchive } from '../lib/useArchive'
 import { brokenLinks } from '../lib/derive'
 import { Badge, Section } from '../components/ui'
+import { DefaultKeyWarning } from '../components/WriteKeyField'
 
 /**
  * 설정.
@@ -17,6 +18,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [writeKey, setWriteKeyInput] = useState(getWriteKey())
   const [keySaved, setKeySaved] = useState(false)
+  const [editor, setEditor] = useState(getEditorName())
 
   const broken = brokenLinks(data.practiceLinks)
   const unverifiedLinks = data.practiceLinks.filter((l) => !l.검증)
@@ -77,8 +79,9 @@ export default function Settings() {
         </div>
       </Section>
 
-      <Section title="편집 키 (다음 찬양으로)">
+      <Section title="편집 키 (시트에 쓰기)">
         <div className="card space-y-3 p-4">
+          <DefaultKeyWarning />
           <div>
             <label className="label" htmlFor="write-key">편집 키</label>
             <input
@@ -91,8 +94,24 @@ export default function Settings() {
               autoComplete="off"
             />
             <p className="mt-1 text-xs text-stone-400">
-              곡 화면의 &lsquo;다음 찬양으로&rsquo;가 시트에 쓸 때 씁니다. 이 브라우저에만 저장되고, 없으면 붙여넣기 블록만 나옵니다.
+              곡 화면의 &lsquo;다음 찬양으로&rsquo;·&lsquo;확인&rsquo;·&lsquo;영상 넣기&rsquo;가 시트에 쓸 때 씁니다. 이 브라우저에만 저장되고, 없으면 붙여넣기 블록만 나옵니다.
             </p>
+          </div>
+          <div>
+            <label className="label" htmlFor="editor-name">내 이름</label>
+            <input
+              id="editor-name"
+              type="text"
+              value={editor}
+              onChange={(e) => {
+                setEditor(e.target.value)
+                setEditorName(e.target.value)
+              }}
+              placeholder="예: 김총무"
+              className="field mt-1"
+              autoComplete="name"
+            />
+            <p className="mt-1 text-xs text-stone-400">시트의 _변경기록에 누가 바꿨는지로 남습니다.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button

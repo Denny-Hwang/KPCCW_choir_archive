@@ -48,9 +48,12 @@ function section(title: string) {
 }
 
 async function main() {
-  const source = process.argv[2]
+  const args = process.argv.slice(2)
+  // --strict: 문제가 하나라도 있으면 실패로 끝낸다. 예약 점검(.github/workflows/verify-data.yml)이 쓴다.
+  const strict = args.includes('--strict')
+  const source = args.find((a) => !a.startsWith('--'))
   if (!source) {
-    console.error('사용법: npm run verify -- <payload.json | exec URL>')
+    console.error('사용법: npm run verify -- <payload.json | exec URL> [--strict]')
     process.exit(1)
   }
 
@@ -148,6 +151,7 @@ async function main() {
   console.log(dropped === 0 && problems.length === 0 && broken.length === 0
     ? '  이상 없음 — 시트 데이터가 앱에 그대로 도착했습니다.'
     : `  버려진 행 ${dropped} · 참조 오류 ${problems.length} · 주소 오류 ${broken.length} — 위 내용을 확인하세요.`)
+  if (strict && (dropped > 0 || problems.length > 0 || broken.length > 0)) process.exit(1)
 }
 
 main().catch((e) => {

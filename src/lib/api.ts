@@ -11,6 +11,7 @@ import type { ArchiveData, RawPayload } from './types'
 const CACHE_KEY = 'kpccw.archive.cache.v1'
 const ENDPOINT_KEY = 'kpccw.archive.endpoint'
 const WRITE_KEY = 'kpccw.archive.writeKey'
+const EDITOR_KEY = 'kpccw.archive.editor'
 
 /**
  * 배포된 Apps Script 읽기 엔드포인트.
@@ -61,6 +62,29 @@ export function setWriteKey(key: string): void {
   const trimmed = key.trim()
   if (trimmed) safeSet(WRITE_KEY, trimmed)
   else safeRemove(WRITE_KEY)
+}
+
+/** 시트 쓰기 때 _변경기록에 남는 이름. 로그인이 없으므로 본인이 밝힌 이름이다. */
+export function getEditorName(): string {
+  return safeGet(EDITOR_KEY)
+}
+
+export function setEditorName(name: string): void {
+  const trimmed = name.trim()
+  if (trimmed) safeSet(EDITOR_KEY, trimmed)
+  else safeRemove(EDITOR_KEY)
+}
+
+/**
+ * 그 찬양일의 공지를 이 기기에서 언제 복사했는지. 준비 상태 화면의 "공지" 항목.
+ * 카톡으로 보냈는지까지는 알 수 없으므로 "복사함"까지만 말한다.
+ */
+export function getNoticeCopiedAt(찬양일: string): string | null {
+  return safeGet(`kpccw.archive.noticeCopied.${찬양일}`) || null
+}
+
+export function markNoticeCopied(찬양일: string): void {
+  safeSet(`kpccw.archive.noticeCopied.${찬양일}`, new Date().toISOString())
 }
 
 export function readCache(): { payload: RawPayload; fetchedAt: string } | null {

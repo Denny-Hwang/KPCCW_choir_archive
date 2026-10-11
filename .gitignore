@@ -6,3 +6,7 @@ dist
 .DS_Store
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+
+# clasp: 각자 로그인·프로젝트 ID (.clasp.json.example을 복사해 쓴다)
+.clasp.json
+.clasprc.json

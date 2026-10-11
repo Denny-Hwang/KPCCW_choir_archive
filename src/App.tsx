@@ -21,6 +21,7 @@ import SongDetail from './pages/SongDetail'
 // 대원이 홈만 보고 닫는 흔한 경우에 이걸 먼저 받게 할 이유가 없다.
 const Planner = lazy(() => import('./pages/Planner'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Ready = lazy(() => import('./pages/Ready'))
 
 /**
  * GitHub Pages에는 서버 리라이트가 없다. HashRouter를 쓰면 새로고침·딥링크가
@@ -108,6 +109,7 @@ function Chrome() {
             <Route path="/song/:songCode" element={<SongDetail />} />
             <Route path="/planner" element={<Planner />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/ready" element={<Ready />} />
             <Route
               path="*"
               element={<p className="card p-8 text-center text-sm text-stone-500">없는 화면입니다.</p>}
