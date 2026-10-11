@@ -6,6 +6,7 @@ import { formatMonth, formatMonthDay, monthKey, todayKey, weekdayOf } from '../l
 import { normalizeLink } from '../lib/youtube'
 import { Empty, RecordingButton, Spinner } from '../components/ui'
 import { PartLinkChips } from '../components/PartLinks'
+import { PlayIcon } from '../components/icons'
 
 /** 월별 아카이브 (§6.2). 연도 경계는 저장이 평면이라 자연히 넘어간다 (§3). */
 export default function Archive() {
@@ -44,7 +45,7 @@ export default function Archive() {
 
   return (
     <div className="space-y-4">
-      {/* 붉은색은 "그 날의 실황영상"에만 쓴다. 게시판 전체로 가는 이 버튼까지 붉으면
+      {/* 붉은색은 "그 날의 찬양기록"에만 쓴다. 게시판 전체로 가는 이 버튼까지 붉으면
           목록에서 가장 큰 소리를 내는 것이 가장 덜 구체적인 동작이 된다. */}
       {data.config.예배영상URL && (
         <RecordingButton fallbackUrl={data.config.예배영상URL} tone="quiet" />
@@ -86,9 +87,16 @@ export default function Archive() {
                 onClick={() => toggle(group.month)}
                 className="flex w-full items-center justify-between px-4 py-3 text-left"
               >
-                <span className="font-bold">{formatMonth(group.month)}</span>
-                <span className="text-xs text-stone-400">
-                  {group.services.length}회 {expanded ? '▾' : '▸'}
+                <span className="text-lg font-bold">{formatMonth(group.month)}</span>
+                <span className="flex items-center gap-1 text-sm text-stone-400">
+                  {group.services.length}회
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                    className={`h-6 w-6 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                  >
+                    <path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </span>
               </button>
 
@@ -100,7 +108,7 @@ export default function Archive() {
                     return (
                       <li key={`${service.찬양일}-${service.예배구분}`} className="px-4 py-3">
                         <div className="flex items-baseline justify-between gap-2">
-                          <p className="text-sm font-semibold">
+                          <p className="text-base font-semibold">
                             {formatMonthDay(service.찬양일)} ({weekdayOf(service.찬양일)})
                             {service.예배구분 && <span className="ml-1 text-xs font-normal text-stone-400">{service.예배구분}</span>}
                           </p>
@@ -117,7 +125,7 @@ export default function Archive() {
                             service.곡.map((표시명) => {
                               const song = songs.get(표시명)
                               return (
-                                <li key={표시명} className="text-sm">
+                                <li key={표시명} className="text-[15px]">
                                   {/* 목록에서는 곡 상세로 보내지 않는다. 여기서 필요한 것은
                                       곡 이름과 파트 링크지, 한 단계 더 들어가는 것이 아니다. */}
                                   {song?.제목 || 표시명}
@@ -134,18 +142,16 @@ export default function Archive() {
                           )}
                         </ul>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-500">
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-stone-500">
                           {record && (
                             <a
                               href={record.shareUrl}
                               target="_blank"
                               rel="noreferrer noopener"
-                              className="chip bg-rose-600 text-white hover:brightness-110"
+                              className="chip bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:brightness-110"
                             >
-                              <svg viewBox="0 0 24 24" aria-hidden className="h-2.5 w-2.5 fill-current opacity-80">
-                                <path d="M8 5v14l11-7z" />
-                              </svg>
-                              실황영상
+                              <PlayIcon className="h-5 w-5" />
+                              찬양기록
                             </a>
                           )}
                           {service.세션 && <span>세션 {service.세션}</span>}

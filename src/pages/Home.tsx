@@ -5,6 +5,8 @@ import { buildServiceView, pickFeaturedService, songPath, totalAttendance } from
 import { daysBetween, formatKoreanTime, formatLongDate, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
 import type { Rehearsal } from '../lib/types'
 import { PartLinks } from '../components/PartLinks'
+import { PlayIcon } from '../components/icons'
+import { youtubeSearchUrl } from '../lib/youtube'
 import { CopyBlock, Empty, RecordingButton, Section, Spinner } from '../components/ui'
 
 /**
@@ -55,7 +57,7 @@ export default function Home() {
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs opacity-70">{upcoming ? '다가오는 찬양' : '가장 최근 찬양'}</p>
             {daysLeft != null && (
-              <span className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold">
+              <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold">
                 {daysLeft === 0 ? '오늘' : `${daysLeft}일 남음`}
               </span>
             )}
@@ -85,7 +87,17 @@ export default function Home() {
                   )}
                   {song.song?.곡코드 && <span className="text-xs text-stone-400">{song.song.곡코드}</span>}
                 </div>
-                <PartLinks links={song.links} order={data.config.공지_파트순서} />
+                <PartLinks
+                  links={song.links}
+                  order={data.config.공지_파트순서}
+                  searchUrl={(part) =>
+                    youtubeSearchUrl(
+                      song.song ?? { 제목: song.제목, 수록번호: null },
+                      data.books.find((b) => b.집코드 === song.song?.집코드),
+                      part,
+                    )
+                  }
+                />
               </div>
             ))
           ) : (
@@ -101,7 +113,7 @@ export default function Home() {
             </p>
           )}
 
-          {/* 다가오는 찬양에는 아직 실황영상이 있을 수 없다. 게시판으로 보내는 안내는
+          {/* 다가오는 찬양에는 아직 찬양기록이 있을 수 없다. 게시판으로 보내는 안내는
               지난 찬양일 때만 뜻이 있다. */}
           <RecordingButton
             recordingUrl={featured.기록영상URL}
@@ -145,9 +157,9 @@ export default function Home() {
                     </div>
                     <span className="flex shrink-0 items-center gap-1.5 text-xs text-stone-400">
                       {s.기록영상URL && (
-                        <svg viewBox="0 0 24 24" aria-label="실황영상 있음" className="h-3 w-3 fill-rose-600">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
+                        <span className="text-rose-600">
+                          <PlayIcon label="찬양기록 있음" className="h-5 w-5" />
+                        </span>
                       )}
                       {total != null
                         ? `총 ${total}명`
@@ -201,7 +213,7 @@ function RehearsalSchedule({
                   {formatMonthDay(r.연습일)} ({weekdayOf(r.연습일)}) {r.구분} {formatKoreanTime(r.시각)}
                 </span>
                 {r.장소 && <span className="font-normal text-stone-400">· {r.장소}</span>}
-                {isNext && <span className="chip bg-stone-800 text-[10px] text-white">다음 연습</span>}
+                {isNext && <span className="chip bg-stone-800 text-xs text-white">다음 연습</span>}
               </li>
             )
           })}

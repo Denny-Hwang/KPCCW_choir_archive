@@ -19,9 +19,6 @@ var DEFAULT_CHANNEL_HANDLE = 'JandAArt';
 /** 6분 실행 제한 전에 안전하게 중단하고 이어서 실행할 수 있게 한다. */
 var MAX_RUNTIME_MS = 4.5 * 60 * 1000;
 
-/** 재생목록에 들어가지 않은 영상까지 훑을지. 켜면 행이 크게 늘어난다. */
-var INCLUDE_UPLOADS = false;
-
 var CACHE_HEADERS = ['videoId', '제목', '재생목록명', 'playlistId',
                      '재생목록내순서', '게시일', '수집일시'];
 
@@ -32,113 +29,178 @@ var CACHE_HEADERS = ['videoId', '제목', '재생목록명', 'playlistId',
  */
 function syncChannel() {
   var ui = SpreadsheetApp.getUi();
-  var t0 = Date.now();
-  var props = PropertiesService.getScriptProperties();
-
   try {
     var ss = getSpreadsheet_();
-    var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
-    var sheet = getCacheSheet_(ss);
-    var channelId = resolveChannelId_(ss);
-    var playlists = fetchAllPlaylists_(channelId);
-
-    // 중복 판정은 videoId 단독이 아니라 videoId+playlistId 조합으로 한다.
-    // 같은 영상이 '중앙성가 41집'과 '음원 모음'에 모두 들어 있을 수 있는데,
-    // videoId만으로 걸러내면 집 번호를 알려주는 쪽 행이 사라진다.
-    var seen = loadSeenKeys_(sheet);
-    var stamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
-
-    var added = 0;
-    var startIndex = Number(props.getProperty('RESUME_INDEX') || 0);
-    if (!(startIndex >= 0) || startIndex >= playlists.length) startIndex = 0;
-
-    // 중단 지점을 재생목록 인덱스뿐 아니라 페이지 토큰까지 남긴다.
-    // 인덱스만 남기면 재개할 때마다 그 재생목록을 0쪽부터 다시 훑게 되는데,
-    // 재생목록 하나의 페이지 수가 한 번의 실행 예산을 넘으면 영원히 끝에 닿지 못한다.
-    // 토큰이 어느 재생목록의 것인지도 함께 확인한다 — 채널의 재생목록 순서가
-    // 실행 사이에 바뀌면 엉뚱한 재생목록에 토큰을 쓰게 되기 때문이다.
-    var startToken = props.getProperty('RESUME_TOKEN') || null;
-    if (props.getProperty('RESUME_PLAYLIST_ID') !== (playlists[startIndex] || {}).id) {
-      startToken = null;
-    }
-
-    var i = startIndex;
-    var pendingToken = null;
-
-    for (; i < playlists.length; i++) {
-      if (Date.now() - t0 > MAX_RUNTIME_MS) { pendingToken = null; break; }
-
-      var pl = playlists[i];
-      var rows = [];
-      var token = (i === startIndex) ? startToken : null;
-      var exhausted = false;
-
-      do {
-        var res = YouTube.PlaylistItems.list('snippet', {
-          playlistId: pl.id, maxResults: 50, pageToken: token
-        });
-
-        (res.items || []).forEach(function (item) {
-          var sn = item.snippet || {};
-          var vid = sn.resourceId && sn.resourceId.videoId;
-          if (!vid) return;
-          // 삭제·비공개 영상은 제목이 자리표시자로 바뀌어 매칭에 쓸 수 없다.
-          if (sn.title === 'Deleted video' || sn.title === 'Private video') return;
-
-          var key = vid + '|' + pl.id;
-          if (seen[key]) return;
-          seen[key] = true;
-
-          rows.push([
-            vid,
-            sn.title || '',
-            pl.title,
-            pl.id,
-            typeof sn.position === 'number' ? sn.position + 1 : '',
-            sn.publishedAt ? String(sn.publishedAt).slice(0, 10) : '',
-            stamp
-          ]);
-        });
-
-        token = res.nextPageToken;
-        if (!token) exhausted = true;
-      } while (token && Date.now() - t0 <= MAX_RUNTIME_MS);
-
-      if (rows.length) {
-        sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CACHE_HEADERS.length).setValues(rows);
-        added += rows.length;
-      }
-
-      // 이 재생목록의 페이지가 남았는데 시간이 끊긴 경우.
-      // i를 증가시키지 않고 빠져나와야 다음 실행이 이 재생목록을 이어받는다.
-      // (i++ 뒤에 중단하면 남은 페이지를 영영 못 가져오고, 알림은 완료로 뜬다.)
-      if (!exhausted) { pendingToken = token; break; }
-    }
-
-    var message;
-    if (i < playlists.length) {
-      props.setProperty('RESUME_INDEX', String(i));
-      props.setProperty('RESUME_PLAYLIST_ID', playlists[i].id);
-      if (pendingToken) props.setProperty('RESUME_TOKEN', pendingToken);
-      else props.deleteProperty('RESUME_TOKEN');
-      message = '시간 제한으로 중단했습니다.\n\n' +
-        '재생목록 ' + i + '/' + playlists.length + ' 완료, 신규 ' + added + '행 추가.\n' +
-        '[채널 동기화]를 다시 실행하면 중단한 지점부터 이어서 진행합니다.';
-    } else {
-      clearResumeState_(props);
-      message = '완료.\n\n재생목록 ' + playlists.length + '개, 신규 ' + added + '행 추가.\n\n' +
-        '이어서 [제목 형식 확인]으로 영상 제목 형식을 눈으로 확인한 뒤 [영상 매칭]을 실행하세요.';
-    }
-    ui.alert('채널 동기화', message, ui.ButtonSet.OK);
+    var playlists = fetchAllPlaylists_(resolveChannelId_(ss));
+    var r = mirrorPlaylists_(ss, playlists, 'RESUME_');
+    ui.alert('채널 동기화', r.done
+      ? '완료.\n\n재생목록 ' + playlists.length + '개, 신규 ' + r.added + '행 추가.\n\n' +
+        '이어서 [제목 형식 확인]으로 영상 제목 형식을 눈으로 확인한 뒤 [영상 매칭]을 실행하세요.'
+      : '시간 제한으로 중단했습니다.\n\n' +
+        '재생목록 ' + r.index + '/' + playlists.length + ' 완료, 신규 ' + r.added + '행 추가.\n' +
+        '[채널 동기화]를 다시 실행하면 중단한 지점부터 이어서 진행합니다.',
+      ui.ButtonSet.OK);
   } catch (err) {
     ui.alert('동기화 실패', String(err && err.message ? err.message : err), ui.ButtonSet.OK);
   }
 }
 
-function clearResumeState_(props) {
-  props.deleteProperty('RESUME_INDEX');
-  props.deleteProperty('RESUME_TOKEN');
-  props.deleteProperty('RESUME_PLAYLIST_ID');
+/**
+ * 업로드 전체 동기화 — 메뉴: 성가 아카이브 > 업로드 전체 동기화
+ *
+ * 채널 동기화는 재생목록을 따라가는데, playlists.list는 채널이 소유한 공개 재생목록만 준다.
+ * 그래서 유튜브에 멀쩡히 있는 영상이 앱에 안 보이는 일이 반복됐다(36·37·38·39·40·41집).
+ * 재생목록을 하나씩 찾아 넣는 대신, 채널의 **업로드 목록(UU…)** 을 통째로 받는다.
+ * 채널이 올린 공개 영상은 어느 재생목록에 있든 없든 전부 여기 들어 있다.
+ *
+ * 재생목록명이 "(전체 업로드)"라 집 번호는 영상 제목에서 읽는다 — 제목에 "중앙성가 36집"이
+ * 들어 있다. 영상 수가 많아 한 번에 안 끝나면 페이지 토큰을 남기고, 다시 누르면 이어서 간다.
+ * 이미 캐시에 있는 영상(같은 videoId|playlistId)은 다시 넣지 않으므로 몇 번을 돌려도 안전하다.
+ * 할당량은 50개당 1 unit이라 채널 전체를 받아도 수백 units다(하루 10,000).
+ */
+function syncUploads() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var ss = getSpreadsheet_();
+    var uploads = uploadsPlaylist_(resolveChannelId_(ss));
+    if (!uploads) {
+      ui.alert('채널의 업로드 목록을 찾지 못했습니다. 유튜브채널ID 설정을 확인하세요.');
+      return;
+    }
+    var r = mirrorPlaylists_(ss, [uploads], 'UPLOADS_RESUME_');
+    ui.alert('업로드 전체 동기화', r.done
+      ? '완료. 신규 ' + r.added + '행 추가.\n\n' +
+        '이어서 [악보집 일괄 등록] → [영상 매칭]을 실행하세요.\n' +
+        '영상 매칭이 끝나면 [_빠진파트] 시트에 아직 비어 있는 곡·파트가 정리됩니다.'
+      : '시간 제한으로 중단했습니다. 이번에 ' + r.added + '행 추가.\n\n' +
+        '[업로드 전체 동기화]를 다시 누르면 중단한 지점부터 이어서 받습니다.\n' +
+        '"완료"가 뜰 때까지 반복하세요.',
+      ui.ButtonSet.OK);
+  } catch (err) {
+    ui.alert('업로드 동기화 실패', String(err && err.message ? err.message : err), ui.ButtonSet.OK);
+  }
+}
+
+function uploadsPlaylist_(channelId) {
+  var channel = YouTube.Channels.list('contentDetails', { id: channelId });
+  var items = channel.items || [];
+  if (!items.length || !items[0].contentDetails) return null;
+  var id = items[0].contentDetails.relatedPlaylists.uploads;
+  return id ? { id: id, title: UPLOADS_PLAYLIST_TITLE } : null;
+}
+
+var UPLOADS_PLAYLIST_TITLE = '(전체 업로드)';
+
+/**
+ * 재생목록들을 yt_cache에 복사한다. 채널 동기화와 업로드 전체 동기화가 함께 쓴다.
+ * prefix는 이어하기 상태를 담는 스크립트 속성 이름의 앞머리다 — 둘이 서로의 중단 지점을 덮지 않게.
+ *
+ * 돌려주는 것: { done, added, index }
+ */
+function mirrorPlaylists_(ss, playlists, prefix) {
+  var t0 = Date.now();
+  var props = PropertiesService.getScriptProperties();
+  var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
+  var sheet = getCacheSheet_(ss);
+
+  // 중복 판정은 videoId 단독이 아니라 videoId+playlistId 조합으로 한다.
+  // 같은 영상이 '중앙성가 41집'과 '음원 모음'에 모두 들어 있을 수 있는데,
+  // videoId만으로 걸러내면 집 번호를 알려주는 쪽 행이 사라진다.
+  var seen = loadSeenKeys_(sheet);
+  var stamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
+
+  var added = 0;
+  var startIndex = Number(props.getProperty(prefix + 'INDEX') || 0);
+  if (!(startIndex >= 0) || startIndex >= playlists.length) startIndex = 0;
+
+  // 중단 지점을 재생목록 인덱스뿐 아니라 페이지 토큰까지 남긴다.
+  // 인덱스만 남기면 재개할 때마다 그 재생목록을 0쪽부터 다시 훑게 되는데,
+  // 재생목록 하나의 페이지 수가 한 번의 실행 예산을 넘으면 영원히 끝에 닿지 못한다.
+  // 토큰이 어느 재생목록의 것인지도 함께 확인한다 — 채널의 재생목록 순서가
+  // 실행 사이에 바뀌면 엉뚱한 재생목록에 토큰을 쓰게 되기 때문이다.
+  var startToken = props.getProperty(prefix + 'TOKEN') || null;
+  if (props.getProperty(prefix + 'PLAYLIST_ID') !== (playlists[startIndex] || {}).id) {
+    startToken = null;
+  }
+
+  function flush(rows) {
+    if (!rows.length) return;
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CACHE_HEADERS.length).setValues(rows);
+    added += rows.length;
+    rows.length = 0;
+  }
+
+  var i = startIndex;
+  var pendingToken = null;
+
+  for (; i < playlists.length; i++) {
+    if (Date.now() - t0 > MAX_RUNTIME_MS) { pendingToken = null; break; }
+
+    var pl = playlists[i];
+    var rows = [];
+    var token = (i === startIndex) ? startToken : null;
+    var exhausted = false;
+
+    do {
+      var res = YouTube.PlaylistItems.list('snippet', {
+        playlistId: pl.id, maxResults: 50, pageToken: token
+      });
+
+      (res.items || []).forEach(function (item) {
+        var sn = item.snippet || {};
+        var vid = sn.resourceId && sn.resourceId.videoId;
+        if (!vid) return;
+        // 삭제·비공개 영상은 제목이 자리표시자로 바뀌어 매칭에 쓸 수 없다.
+        if (sn.title === 'Deleted video' || sn.title === 'Private video') return;
+
+        var key = vid + '|' + pl.id;
+        if (seen[key]) return;
+        seen[key] = true;
+
+        rows.push([
+          vid,
+          sn.title || '',
+          pl.title,
+          pl.id,
+          typeof sn.position === 'number' ? sn.position + 1 : '',
+          sn.publishedAt ? String(sn.publishedAt).slice(0, 10) : '',
+          stamp
+        ]);
+      });
+
+      // 업로드 목록은 수백 쪽이다. 중간에 예외가 나도 받은 만큼은 남도록 자주 쓴다.
+      if (rows.length >= 1000) flush(rows);
+
+      token = res.nextPageToken;
+      if (!token) exhausted = true;
+    } while (token && Date.now() - t0 <= MAX_RUNTIME_MS);
+
+    flush(rows);
+
+    // 이 재생목록의 페이지가 남았는데 시간이 끊긴 경우.
+    // i를 증가시키지 않고 빠져나와야 다음 실행이 이 재생목록을 이어받는다.
+    // (i++ 뒤에 중단하면 남은 페이지를 영영 못 가져오고, 알림은 완료로 뜬다.)
+    if (!exhausted) { pendingToken = token; break; }
+  }
+
+  if (i < playlists.length) {
+    props.setProperty(prefix + 'INDEX', String(i));
+    props.setProperty(prefix + 'PLAYLIST_ID', playlists[i].id);
+    if (pendingToken) props.setProperty(prefix + 'TOKEN', pendingToken);
+    else props.deleteProperty(prefix + 'TOKEN');
+    return { done: false, added: added, index: i };
+  }
+  clearResumeState_(props, prefix);
+  return { done: true, added: added, index: i };
+}
+
+function clearResumeState_(props, prefix) {
+  var prefixes = prefix ? [prefix] : ['RESUME_', 'UPLOADS_RESUME_'];
+  prefixes.forEach(function (p) {
+    props.deleteProperty(p + 'INDEX');
+    props.deleteProperty(p + 'TOKEN');
+    props.deleteProperty(p + 'PLAYLIST_ID');
+  });
 }
 
 /**
@@ -284,13 +346,7 @@ function fetchAllPlaylists_(channelId) {
     token = res.nextPageToken;
   } while (token);
 
-  if (INCLUDE_UPLOADS) {
-    var channel = YouTube.Channels.list('contentDetails', { id: channelId });
-    var items = channel.items || [];
-    if (items.length && items[0].contentDetails) {
-      out.push({ id: items[0].contentDetails.relatedPlaylists.uploads, title: '(전체 업로드)' });
-    }
-  }
+  // 업로드 목록(재생목록에 없는 영상까지)은 [업로드 전체 동기화]가 따로 받는다.
 
   return out;
 }
@@ -367,6 +423,8 @@ function cacheReport() {
 
   var byPlaylist = {};
   var order = [];
+  var VOICE_PARTS = ['소프라노', '알토', '테너', '베이스'];
+  var voiceByBook = {};
   for (var i = 0; i < rows.length; i++) {
     var name = rows[i]['재생목록명'] || '(이름 없음)';
     if (!byPlaylist[name]) {
@@ -380,6 +438,13 @@ function cacheReport() {
     var parsed = parseVideoTitle_(rows[i]['제목']);
     info.parts[parsed.part] = (info.parts[parsed.part] || 0) + 1;
     if (!parsed.number) info.noNumber++;
+    // 권별 파트 수는 영상마다 센다. [전체 업로드] 목록은 이름에 집 번호가 없어,
+    // 재생목록 단위로 세면 그 안의 파트 영상이 어느 권에도 잡히지 않는다.
+    var entryBook = info.book || parsed.bookCode;
+    if (entryBook) {
+      if (voiceByBook[entryBook] === undefined) voiceByBook[entryBook] = 0;
+      if (VOICE_PARTS.indexOf(parsed.part) !== -1) voiceByBook[entryBook]++;
+    }
   }
 
   // 인식된 권 / 다른 시리즈 / 그 밖으로 나눈다.
@@ -419,16 +484,6 @@ function cacheReport() {
   // 보유 권 단위 요약. 재생목록이 아예 없는 권과, 목록은 있는데
   // 파트(소프라노~베이스) 영상이 하나도 없는 권을 나눠서 보여준다.
   // "40집을 추가했는데 왜 파트가 안 들어가지?"는 이 두 줄이 답이다.
-  var VOICE_PARTS = ['소프라노', '알토', '테너', '베이스'];
-  var voiceByBook = {};
-  order.forEach(function (name) {
-    var info = byPlaylist[name];
-    if (!info.book) return;
-    var count = voiceByBook[info.book] || 0;
-    VOICE_PARTS.forEach(function (part) { count += info.parts[part] || 0; });
-    voiceByBook[info.book] = count;
-  });
-
   var missing = [];
   var voiceless = [];
   var books = readSheet_(ss, 'books', ss.getSpreadsheetTimeZone());
@@ -747,6 +802,13 @@ function matchVideos() {
   var report = split.bad.map(function (b) { return '시트가 거부함 / ' + b.reason; });
   writeReport_(ss, report.concat(failures));
 
+  var nameIdx = linkHeaders.map(function (h) { return String(h).trim(); }).indexOf('표시명');
+  var partIdx = linkHeaders.map(function (h) { return String(h).trim(); }).indexOf('파트');
+  var have = {};
+  for (var sk in seen) have[sk] = true;
+  split.ok.forEach(function (row) { have[row[nameIdx] + '|' + row[partIdx]] = true; });
+  var gapCount = writeGapReport_(ss, songs, booksWithSongs, have, tz);
+
   var notOwnedCodes = Object.keys(notOwned).sort(function (a, b) {
     return bookNumber_(a) - bookNumber_(b);
   });
@@ -781,9 +843,168 @@ function matchVideos() {
           '유튜브에서 "[중앙아트] 중앙성가 NN집" 재생목록을 찾아 [재생목록 직접 추가]에\n' +
           '주소를 넣고, [영상 매칭]을 다시 실행하세요.\n\n'
         : '') +
+      (gapCount
+        ? '아직 파트 영상이 빠진 곡 ' + gapCount + '개 — [_빠진파트] 시트에 유튜브 검색 주소와 함께 적었습니다.\n' +
+          '(부른 곡·예정곡이 위에 옵니다. [업로드 전체 동기화]를 아직 안 했다면 먼저 해 보세요.)\n\n'
+        : '보유 권의 모든 곡에 합창·소프라노·알토·테너·베이스 영상이 있습니다.\n\n') +
       '추가된 링크는 사람이 재생을 확인해 검증 열을 체크하기 전까지 공지에 나가지 않습니다.',
     ui.ButtonSet.OK
   );
+}
+
+/** 빠진 파트를 따지는 대상. 반주는 영상이 없는 권이 많아 빼고 본다. */
+var GAP_PARTS = ['합창', '소프라노', '알토', '테너', '베이스'];
+
+/**
+ * 보유 권의 곡마다 아직 링크가 없는 파트를 [_빠진파트] 시트에 적는다.
+ *
+ * "영상이 실제로는 있는데 앱에서 안 보인다"는 곡 하나를 열어 봐야 드러났다.
+ * 서가 전체를 한 장에 모아, 부른 곡·예정곡부터 유튜브 검색 주소와 함께 보여준다.
+ * 사람이 찾으면 practice_links에 그 주소를 넣거나, 그 영상이 속한 재생목록을
+ * [재생목록 직접 추가]에 넣으면 된다.
+ *
+ * have: '표시명|파트' → true. 돌려주는 것: 빠진 곡 수.
+ */
+function writeGapReport_(ss, songs, booksWithSongs, have, tz) {
+  var used = {};
+  readSheet_(ss, 'services', tz).forEach(function (row) {
+    ['곡1', '곡2', '곡3'].forEach(function (c) {
+      var v = String(row[c] || '').trim();
+      if (v) used[v] = true;
+    });
+  });
+
+  var rows = [];
+  for (var i = 0; i < songs.length; i++) {
+    var display = String(songs[i]['표시명'] || '').trim();
+    var book = String(songs[i]['집코드'] || '').trim();
+    if (!display || !book || !booksWithSongs[book]) continue;
+    var missing = GAP_PARTS.filter(function (part) { return !have[display + '|' + part]; });
+    if (!missing.length) continue;
+    var title = String(songs[i]['제목'] || '').trim();
+    var no = songs[i]['수록번호'];
+    var query = '중앙성가 ' + bookNumber_(book) + '집 ' + (no ? padNumber_(Number(no)) + '. ' : '') + title;
+    rows.push([
+      used[display] ? '부름·예정' : '',
+      book,
+      String(songs[i]['곡코드'] || ''),
+      title,
+      missing.length === GAP_PARTS.length ? '전부' : missing.join(', '),
+      'https://www.youtube.com/results?search_query=' + encodeURIComponent(query)
+    ]);
+  }
+  rows.sort(function (a, b) {
+    return (a[0] ? 0 : 1) - (b[0] ? 0 : 1) ||
+      bookNumber_(a[1]) - bookNumber_(b[1]) ||
+      String(a[2]).localeCompare(String(b[2]));
+  });
+
+  var headers = ['부름', '집코드', '곡코드', '제목', '빠진 파트', '유튜브 검색'];
+  var sheet = ss.getSheetByName('_빠진파트') || ss.insertSheet('_빠진파트');
+  sheet.clear();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+  if (rows.length) sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  sheet.setFrozenRows(1);
+  return rows.length;
+}
+
+/**
+ * 곡명 정리 — 메뉴: 성가 아카이브 > 곡명 정리 (파트 꼬리 떼기)
+ *
+ * 옛 파서가 "이런 교회 되게 하소서 합창"처럼 파트 이름을 곡명에 붙인 채 등록한 곡을 고친다.
+ * 표시명은 제목에서 수식으로 만들어지므로, 제목을 바꾸면 표시명이 바뀌고
+ * 그 표시명을 쓰던 practice_links·services 칸이 끊긴다. 그래서 세 시트를 함께 바꾼다.
+ *
+ * 채널에서 자동 등록한 곡(출처 youtube_channel)만 손댄다 — 사람이 쓴 곡명은 그대로 둔다.
+ * 바꾸기 전에 목록을 보여주고 묻는다. 되돌리기는 시트 버전 기록으로 한다.
+ */
+function repairSongTitles() {
+  var ui = SpreadsheetApp.getUi();
+  var ss = getSpreadsheet_();
+  var songsSheet = ss.getSheetByName('songs');
+  if (!songsSheet || songsSheet.getLastRow() < 2) {
+    ui.alert('songs 시트가 비어 있습니다.');
+    return;
+  }
+
+  var values = songsSheet.getRange(1, 1, songsSheet.getLastRow(), songsSheet.getLastColumn()).getValues();
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+  var titleCol = headers.indexOf('제목');
+  var displayCol = headers.indexOf('표시명');
+  var codeCol = headers.indexOf('곡코드');
+  var sourceCol = headers.indexOf('출처');
+  if (titleCol === -1 || displayCol === -1 || codeCol === -1) {
+    ui.alert('songs 시트에 제목/표시명/곡코드 열이 없습니다.');
+    return;
+  }
+
+  var fixes = [];
+  for (var r = 1; r < values.length; r++) {
+    if (sourceCol !== -1 && String(values[r][sourceCol]).trim() !== 'youtube_channel') continue;
+    var title = String(values[r][titleCol] || '').trim();
+    var stripped = stripPartTail_(title);
+    if (!stripped) continue;
+    var code = String(values[r][codeCol] || '').trim();
+    fixes.push({
+      row: r + 1,
+      from: title,
+      to: stripped,
+      oldDisplay: String(values[r][displayCol] || '').trim(),
+      newDisplay: code ? stripped + ' (' + code + ')' : stripped
+    });
+  }
+
+  if (!fixes.length) {
+    ui.alert('곡명 정리', '파트 이름이 곡명 끝에 붙은 곡이 없습니다.', ui.ButtonSet.OK);
+    return;
+  }
+
+  var preview = fixes.slice(0, 15).map(function (f) { return '  ' + f.from + '  →  ' + f.to; }).join('\n');
+  var answer = ui.alert(
+    '곡명 정리',
+    fixes.length + '곡의 이름 끝에서 파트 이름을 뗍니다.\n\n' + preview +
+      (fixes.length > 15 ? '\n  … 외 ' + (fixes.length - 15) + '곡' : '') +
+      '\n\npractice_links·services의 같은 표시명도 함께 바꿉니다. 진행할까요?',
+    ui.ButtonSet.YES_NO
+  );
+  if (answer !== ui.Button.YES) return;
+
+  fixes.forEach(function (f) { songsSheet.getRange(f.row, titleCol + 1).setValue(f.to); });
+  // 표시명 수식이 다시 계산되고, 드롭다운 원본 범위가 새 이름을 담아야 아래 쓰기가 통과한다.
+  SpreadsheetApp.flush();
+  installValidations_(ss);
+
+  var rename = {};
+  fixes.forEach(function (f) { if (f.oldDisplay) rename[f.oldDisplay] = f.newDisplay; });
+  var changed = renameCells_(ss, 'practice_links', ['표시명'], rename) +
+    renameCells_(ss, 'services', ['곡1', '곡2', '곡3'], rename);
+
+  ui.alert(
+    '곡명 정리 완료',
+    fixes.length + '곡 이름을 고치고, 그 곡을 가리키던 칸 ' + changed + '개를 새 이름으로 바꿨습니다.\n\n' +
+      '이어서 [영상 매칭]을 실행하면 빠졌던 파트 영상이 채워집니다.',
+    ui.ButtonSet.OK
+  );
+}
+
+/** 지정한 열에서 rename의 키와 같은 값을 새 값으로 바꾼다. 바꾼 칸 수를 돌려준다. */
+function renameCells_(ss, sheetName, columnNames, rename) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) return 0;
+  var count = 0;
+  columnNames.forEach(function (name) {
+    var col = columnIndex_(sheet, name);
+    if (!col) return;
+    var range = sheet.getRange(2, col, sheet.getLastRow() - 1, 1);
+    var vals = range.getValues();
+    var touched = false;
+    for (var i = 0; i < vals.length; i++) {
+      var v = String(vals[i][0] || '').trim();
+      if (rename[v]) { vals[i][0] = rename[v]; touched = true; count++; }
+    }
+    if (touched) range.setValues(vals);
+  });
+  return count;
 }
 
 /**
@@ -947,12 +1168,29 @@ function parseVideoTitle_(rawTitle) {
   // (곡명 자체에 하이픈이 들어가도 잘리지 않게 하기 위해서다.)
   var part = null;
   var title = rest;
+  // 파트를 어디서 읽었는지. 곡명을 고를 때 구분자가 있던 제목을 더 믿는다 (songsFromCache_).
+  var partFrom = 'none';
   var sep = rest.match(/^(.*?)\s*[–—\-|｜]\s*([^–—\-|｜]{1,24})\s*$/);
   if (sep) {
     var mapped = matchPart_(sep[2]);
     if (mapped) {
       part = mapped;
       title = sep[1].trim();
+      partFrom = 'separator';
+    }
+  }
+
+  // 구분자 없이 파트가 곡명 뒤에 바로 붙는 옛 형식 (36집 등).
+  //   [중앙아트] 중앙성가 36집 09. 이런 교회 되게 하소서 합창
+  //   [중앙아트] 중앙성가 36집 09. 이런 교회 되게 하소서 (알토)
+  // 전에는 파트는 맞게 읽고 곡명에서는 떼지 않아, 악보집 등록이 곡 이름을
+  // "이런 교회 되게 하소서 합창"으로 만들었다. 끝의 낱말이 파트 이름 그 자체일 때만 뗀다.
+  if (!part) {
+    var tail = rest.match(/^(.*\S)\s+[(\[]?\s*(합창|소프라노|알토|테너|베이스|바리톤|반주|피아노)\s*\d?\s*[)\]]?\s*$/);
+    if (tail) {
+      part = matchPart_(tail[2]);
+      title = tail[1].trim();
+      partFrom = 'tail';
     }
   }
   if (!part) part = matchPart_(rest) || '합창';
@@ -964,9 +1202,16 @@ function parseVideoTitle_(rawTitle) {
     number: number,
     title: title.replace(/^[\u2018\u2019\u201C\u201D'"]+|[\u2018\u2019\u201C\u201D'"]+$/g, '').trim(),
     part: part,
+    partFrom: partFrom,
     isMidi: isMidi,
     bookCode: parsePlaylistBook_(head)
   };
+}
+
+/** 끝에 파트 이름이 붙어 버린 곡명에서 그 꼬리를 뗀다. 꼬리가 없으면 ''. */
+function stripPartTail_(title) {
+  var m = String(title || '').match(/^(.*\S)\s+[(\[]?\s*(합창|소프라노|알토|테너|베이스|반주)\s*\d?\s*[)\]]?\s*$/);
+  return m ? m[1].trim() : '';
 }
 
 /** 제목 정규화 (§9.4). 매칭 전 양쪽에 동일하게 적용한다. */
@@ -1135,16 +1380,21 @@ function ensureBookRow_(ss, bookCode, volume) {
 
 function songsFromCache_(cache, bookCode) {
   var found = {};
+  // 같은 곡번호의 제목이 여러 벌이면 "– 소프라노"처럼 구분자로 파트를 뗀 제목을 가장 믿는다.
+  // 파트가 곡명에 바로 붙은 옛 형식은 떼어 내도 곡명 끝이 우연히 파트 이름일 수 있다.
+  var RANK = { separator: 3, none: 2, tail: 1 };
   for (var i = 0; i < cache.length; i++) {
     var parsed = parseVideoTitle_(cache[i]['제목']);
     // 재생목록명이 1순위, 제목 안의 집 이름이 2순위.
     var entryBook = parsePlaylistBook_(cache[i]['재생목록명']) || parsed.bookCode;
     if (entryBook !== bookCode) continue;
     if (!parsed.number || !parsed.title) continue;
-    if (!found[parsed.number]) found[parsed.number] = parsed.title;
+    var rank = RANK[parsed.partFrom] || 0;
+    var prev = found[parsed.number];
+    if (!prev || rank > prev.rank) found[parsed.number] = { title: parsed.title, rank: rank };
   }
   return Object.keys(found)
-    .map(function (n) { return { number: parseInt(n, 10), title: found[n] }; })
+    .map(function (n) { return { number: parseInt(n, 10), title: found[n].title }; })
     .sort(function (a, b) { return a.number - b.number; });
 }
 

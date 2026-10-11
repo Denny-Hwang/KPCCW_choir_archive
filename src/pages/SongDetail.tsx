@@ -5,6 +5,7 @@ import { songUsage } from '../lib/derive'
 import { formatLongDate, todayKey } from '../lib/date'
 import { PlanDialog } from '../components/PlanDialog'
 import { VerifyLinks } from '../components/VerifyLinks'
+import { MissingParts } from '../components/MissingParts'
 import { Badge, Empty, Section, Spinner, UnverifiedBadge } from '../components/ui'
 
 /** 곡 상세 (§6.5). 메타데이터 + 파트별 영상 + 이 곡을 부른 날짜 이력 + "다음 찬양으로". */
@@ -31,7 +32,7 @@ export default function SongDetail() {
 
   return (
     <div className="space-y-5">
-      <button type="button" onClick={() => navigate(-1)} className="text-xs text-stone-500 underline">
+      <button type="button" onClick={() => navigate(-1)} className="text-sm text-stone-500 underline">
         ← 뒤로
       </button>
 
@@ -91,6 +92,7 @@ export default function SongDetail() {
       </div>
 
       <Section title="파트별 영상">
+        <MissingParts song={song} book={book} links={songLinks} order={data.config.공지_파트순서} />
         <VerifyLinks links={songLinks} />
       </Section>
 

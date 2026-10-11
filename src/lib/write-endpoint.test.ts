@@ -355,3 +355,37 @@ describe('applyPlan_', () => {
     expect(r.rehearsalsAdded).toBe(0)
   })
 })
+
+describe('addLink_', () => {
+  let gs: Record<string, any>
+  let state: ReturnType<typeof load>['state']
+  const add = (payload: unknown) => post(gs, { key: 'secret', action: 'addLink', payload })
+  const rows = () => state.ss.sheets.practice_links.rows
+  beforeEach(() => {
+    ;({ gs, state } = load())
+  })
+
+  it('빠진 파트에 사람이 찾은 영상을 확인된 상태로 붙인다', () => {
+    const r = add({ 표시명: '가곡 (중47-01)', 파트: '알토', URL: 'https://www.youtube.com/watch?v=AbCdEfGhIjK&si=x' })
+    expect(r).toEqual({ ok: true, added: 1, URL: 'https://youtu.be/AbCdEfGhIjK' })
+    expect(rows().at(-1)).toEqual(['가곡 (중47-01)', '알토', 'https://youtu.be/AbCdEfGhIjK', '', '앱', 'manual', true])
+    expect(state.validationsInstalled).toBe(1)
+  })
+
+  it('같은 곡·파트·영상이 이미 있으면 붙이지 않는다', () => {
+    const before = rows().length
+    expect(add({ 표시명: '가곡 (중47-01)', 파트: '합창', URL: 'https://youtu.be/aaa' }).ok).toBe(false) // 'aaa'는 ID가 아니다
+    add({ 표시명: '가곡 (중47-01)', 파트: '테너', URL: 'https://youtu.be/AbCdEfGhIjK' })
+    const r = add({ 표시명: '가곡 (중47-01)', 파트: '테너', URL: 'AbCdEfGhIjK' })
+    expect(r).toMatchObject({ ok: true, added: 0 })
+    expect(rows().length).toBe(before + 1)
+  })
+
+  it('없는 곡, 없는 파트, 유튜브가 아닌 주소는 거부한다', () => {
+    const before = JSON.stringify(rows())
+    expect(add({ 표시명: '없는 곡', 파트: '알토', URL: 'AbCdEfGhIjK' }).error).toContain('없는 곡')
+    expect(add({ 표시명: '가곡 (중47-01)', 파트: '지휘', URL: 'AbCdEfGhIjK' }).ok).toBe(false)
+    expect(add({ 표시명: '가곡 (중47-01)', 파트: '알토', URL: 'https://example.com' }).error).toContain('유튜브')
+    expect(JSON.stringify(rows())).toBe(before)
+  })
+})

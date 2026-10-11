@@ -60,6 +60,8 @@ export function VerifyLinks({ links }: { links: PracticeLink[] }) {
   }
 
   const unverified = links.filter((l) => !l.검증).length
+  // 영상이 하나도 없으면 위의 "아직 없는 파트"(MissingParts)가 이미 말한다.
+  if (!links.length) return null
 
   return (
     <div className="space-y-3">
@@ -101,7 +103,7 @@ export function VerifyLinks({ links }: { links: PracticeLink[] }) {
                   type="button"
                   onClick={() => toggle(link, false)}
                   disabled={busy}
-                  className="text-[11px] text-stone-400 underline disabled:opacity-50"
+                  className="text-xs text-stone-400 underline disabled:opacity-50"
                 >
                   {busy ? '저장 중…' : '확인 취소'}
                 </button>
@@ -115,7 +117,7 @@ export function VerifyLinks({ links }: { links: PracticeLink[] }) {
                   {busy ? '저장 중…' : '확인'}
                 </button>
               )}
-              {error && <span className="basis-full text-[11px] text-rose-700">{error}</span>}
+              {error && <span className="basis-full text-xs text-rose-700">{error}</span>}
             </>
           )
         }}

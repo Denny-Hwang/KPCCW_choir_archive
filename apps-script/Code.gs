@@ -173,12 +173,14 @@ function onOpen() {
     .addItem('연도 뷰 탭 만들기', 'createYearViewPrompt')
     .addSeparator()
     .addItem('채널 동기화', 'syncChannel')
+    .addItem('업로드 전체 동기화', 'syncUploads')
     .addItem('제목 형식 확인', 'sampleTitles')
     .addItem('캐시 점검', 'cacheReport')
     .addItem('재생목록 직접 추가', 'addPlaylistPrompt')
     .addItem('영상 매칭', 'matchVideos')
     .addItem('악보집 일괄 등록', 'registerOwnedBooks')
     .addItem('악보집 등록 (한 권)', 'registerBookPrompt')
+    .addItem('곡명 정리 (파트 꼬리 떼기)', 'repairSongTitles')
     .addSeparator()
     .addItem('엔드포인트 점검', 'validateData')
     .addItem('캐시 비우기', 'clearCache')
@@ -186,9 +188,10 @@ function onOpen() {
 }
 
 /* ------------------------------------------------------------------------ */
-/* 쓰기 (§12.2) — 동작은 둘뿐이다.                                                */
+/* 쓰기 (§12.2) — 동작은 셋뿐이다.                                                */
 /*   applyPlan   찬양일 하나에 곡·연습을 추가 ("다음 찬양으로", "시트에 반영")      */
 /*   verifyLink  파트 영상 한 줄의 검증 체크를 켜거나 끈다 (곡 상세의 "확인")        */
+/*   addLink     빠진 파트에 사람이 찾은 영상 한 줄을 붙인다 (곡 상세의 "추가")      */
 /* ------------------------------------------------------------------------ */
 
 /**
@@ -220,6 +223,7 @@ function expectedWriteKey_(ss) {
  * 브라우저는 preflight를 피하려고 text/plain으로 보낸다. 본문은 JSON이다.
  *   { key, action: 'applyPlan',  payload: { 찬양일, 예배구분, 곡: [표시명…], rehearsals: [{연습일, 시각, 구분, 장소}] } }
  *   { key, action: 'verifyLink', payload: { 표시명, 파트, URL, 검증: true|false } }
+ *   { key, action: 'addLink',    payload: { 표시명, 파트, URL } }
  * 응답은 언제나 JSON이고, 실패도 { ok: false, error } 로 200에 실어 보낸다 —
  * Apps Script는 상태 코드를 고를 수 없고, 앱은 어차피 본문을 읽어야 이유를 안다.
  */
@@ -240,7 +244,7 @@ function handleWrite_(body) {
     return { ok: false, error: '편집 키가 맞지 않습니다. config 시트의 앱편집키 값을 확인하세요.' };
   }
   var action = body && body.action;
-  if (action !== 'applyPlan' && action !== 'verifyLink') {
+  if (action !== 'applyPlan' && action !== 'verifyLink' && action !== 'addLink') {
     return { ok: false, error: '알 수 없는 요청입니다: ' + String(action) };
   }
 
@@ -251,7 +255,9 @@ function handleWrite_(body) {
   }
   try {
     var payload = body.payload || {};
-    return action === 'verifyLink' ? verifyLink_(ss, payload) : applyPlan_(ss, payload);
+    if (action === 'verifyLink') return verifyLink_(ss, payload);
+    if (action === 'addLink') return addLink_(ss, payload);
+    return applyPlan_(ss, payload);
   } finally {
     lock.releaseLock();
   }
@@ -298,6 +304,70 @@ function verifyLink_(ss, payload) {
     return { ok: false, error: 'practice_links에서 그 줄을 찾지 못했습니다: ' + 표시명 + ' / ' + 파트 + '. 시트에서 URL이 바뀌었으면 새로고침하세요.' };
   }
   return { ok: true, updated: updated, 검증: 검증 };
+}
+
+var LINK_PARTS = ['합창', '소프라노', '알토', '테너', '베이스', '반주'];
+
+/** 유튜브 주소에서 영상 ID 11자. 못 찾으면 ''. 앱의 extractVideoId와 같은 형태들을 받는다. */
+function youtubeVideoId_(raw) {
+  var v = String(raw || '').trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+  var m = v.match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/|\/live\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : '';
+}
+
+/**
+ * practice_links에 사람이 찾은 파트 영상 한 줄을 붙인다.
+ *
+ * 채널 동기화가 놓친 영상을 곡 상세에서 "유튜브에서 찾기"로 찾은 뒤 그 자리에서 넣는 길이다.
+ * 사람이 재생해 보고 고른 것이므로 `검증=TRUE`, 출처는 manual로 들어간다.
+ * 붙이기만 한다 — 같은 (표시명, 파트, 영상)이 이미 있으면 아무것도 하지 않는다.
+ */
+function addLink_(ss, payload) {
+  var 표시명 = String(payload['표시명'] || '').trim();
+  var 파트 = String(payload['파트'] || '').trim();
+  var videoId = youtubeVideoId_(payload['URL']);
+  if (!표시명) return { ok: false, error: '곡이 없습니다.' };
+  if (LINK_PARTS.indexOf(파트) === -1) return { ok: false, error: '파트는 ' + LINK_PARTS.join('·') + ' 중 하나여야 합니다: ' + 파트 };
+  if (!videoId) return { ok: false, error: '유튜브 영상 주소를 알아보지 못했습니다. 영상의 [공유] 주소를 붙여넣으세요.' };
+
+  var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
+  var known = false;
+  readSheet_(ss, 'songs', tz).forEach(function (row) {
+    if (String(row['표시명'] || '').trim() === 표시명) known = true;
+  });
+  if (!known) return { ok: false, error: 'songs 시트에 없는 곡입니다: ' + 표시명 };
+
+  var sheet = ss.getSheetByName('practice_links');
+  if (!sheet) return { ok: false, error: 'practice_links 시트가 없습니다.' };
+  var headers = sheetHeaders_(sheet);
+  if (headers.indexOf('표시명') === -1 || headers.indexOf('파트') === -1 || headers.indexOf('URL') === -1) {
+    return { ok: false, error: 'practice_links 시트에 표시명/파트/URL 열이 없습니다.' };
+  }
+
+  var dup = readSheet_(ss, 'practice_links', tz).some(function (row) {
+    return String(row['표시명'] || '').trim() === 표시명 &&
+      String(row['파트'] || '').trim() === 파트 &&
+      youtubeVideoId_(row['URL']) === videoId;
+  });
+  if (dup) return { ok: true, added: 0, URL: 'https://youtu.be/' + videoId };
+
+  // 드롭다운 원본 범위가 굳어 새 곡을 거부할 수 있다(§3). 쓰기 전에 다시 심는다.
+  installValidations_(ss);
+  var URL = 'https://youtu.be/' + videoId;
+  var row = headers.map(function (h) {
+    switch (h) {
+      case '표시명': return 표시명;
+      case '파트': return 파트;
+      case 'URL': return URL;
+      case '출처': return 'manual';
+      case '올린이': return '앱';
+      case '검증': return true;
+      default: return '';
+    }
+  });
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
+  return { ok: true, added: 1, URL: URL };
 }
 
 /**

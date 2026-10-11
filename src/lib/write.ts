@@ -147,3 +147,38 @@ export async function verifyLink(payload: VerifyPayload, key: string): Promise<V
   const r = await postWrite(buildVerifyRequest(payload, key))
   return r.ok ? parseVerifyResponse(r.text) : r
 }
+
+/* ---- 빠진 파트 영상 추가 — 곡 상세의 "추가" ---- */
+
+export interface AddLinkPayload {
+  표시명: string
+  파트: string
+  URL: string
+}
+
+export type AddLinkResult = { ok: true; added: number; URL: string } | { ok: false; error: string }
+
+export function buildAddLinkRequest(payload: AddLinkPayload, key: string): string {
+  return JSON.stringify({ key, action: 'addLink', payload })
+}
+
+export function parseAddLinkResponse(text: string): AddLinkResult {
+  const base = parseWriteResponse(text)
+  if (!base.ok) return base
+  let parsed: Record<string, unknown> = {}
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    /* parseWriteResponse가 이미 걸렀다. */
+  }
+  return {
+    ok: true,
+    added: typeof parsed.added === 'number' ? parsed.added : 0,
+    URL: typeof parsed.URL === 'string' ? parsed.URL : '',
+  }
+}
+
+export async function addLink(payload: AddLinkPayload, key: string): Promise<AddLinkResult> {
+  const r = await postWrite(buildAddLinkRequest(payload, key))
+  return r.ok ? parseAddLinkResponse(r.text) : r
+}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildAddLinkRequest,
+  parseAddLinkResponse,
   buildVerifyRequest,
   buildWriteRequest,
   parseVerifyResponse,
@@ -109,5 +111,21 @@ describe('parseWriteResponse', () => {
       rehearsalsAdded: 0,
       rehearsalsSkipped: 0,
     })
+  })
+})
+
+describe('addLink 요청·응답', () => {
+  it('요청 본문은 action=addLink', () => {
+    const body = JSON.parse(buildAddLinkRequest({ 표시명: '가 (중1-01)', 파트: '알토', URL: 'x' }, 'k'))
+    expect(body).toEqual({ key: 'k', action: 'addLink', payload: { 표시명: '가 (중1-01)', 파트: '알토', URL: 'x' } })
+  })
+
+  it('응답을 읽는다', () => {
+    expect(parseAddLinkResponse('{"ok":true,"added":1,"URL":"https://youtu.be/AbCdEfGhIjK"}')).toEqual({
+      ok: true,
+      added: 1,
+      URL: 'https://youtu.be/AbCdEfGhIjK',
+    })
+    expect(parseAddLinkResponse('{"ok":false,"error":"없는 곡"}')).toEqual({ ok: false, error: '없는 곡' })
   })
 })
