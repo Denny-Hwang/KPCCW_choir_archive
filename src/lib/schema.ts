@@ -372,5 +372,6 @@ export function parsePayload(payload: RawPayload | null | undefined): ArchiveDat
       .map(parsePracticeLink)
       .filter((l) => l.표시명 && l.URL),
     config,
+    writeKeyIsDefault: p.writeKeyIsDefault === true,
   }
 }

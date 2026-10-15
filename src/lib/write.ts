@@ -7,7 +7,7 @@
  * Apps Script는 OPTIONS(preflight)를 받지 못한다. 그래서 본문은 JSON이지만
  * text/plain으로 보내고, 302 리다이렉트를 따라간 응답을 그대로 읽는다.
  */
-import { getEndpoint } from './api'
+import { getEditorName, getEndpoint } from './api'
 import { parseDateKey } from './date'
 import type { PlannedDate } from './planner'
 import type { Rehearsal } from './types'
@@ -94,8 +94,23 @@ export function parseWriteResponse(text: string): WriteResult {
   }
 }
 
+/**
+ * 요청 본문에 편집자 이름을 붙인다. 시트의 _변경기록에 "누가"로 남는다.
+ * 요청을 만드는 함수들은 그대로 두고 보내기 직전 한 곳에서 붙인다.
+ */
+export function withEditor(body: string, editor: string): string {
+  const name = editor.trim()
+  if (!name) return body
+  try {
+    return JSON.stringify({ ...(JSON.parse(body) as Record<string, unknown>), editor: name })
+  } catch {
+    return body
+  }
+}
+
 /** 응답 본문을 문자열로. 상태 코드가 200이 아니면 그 자체가 실패다. */
-async function postWrite(body: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+async function postWrite(raw: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const body = withEditor(raw, getEditorName())
   const res = await fetch(getEndpoint(), {
     method: 'POST',
     redirect: 'follow',
@@ -146,4 +161,39 @@ export function parseVerifyResponse(text: string): VerifyResult {
 export async function verifyLink(payload: VerifyPayload, key: string): Promise<VerifyResult> {
   const r = await postWrite(buildVerifyRequest(payload, key))
   return r.ok ? parseVerifyResponse(r.text) : r
+}
+
+/* ---- 빠진 파트 영상 추가 — 곡 상세의 "추가" ---- */
+
+export interface AddLinkPayload {
+  표시명: string
+  파트: string
+  URL: string
+}
+
+export type AddLinkResult = { ok: true; added: number; URL: string } | { ok: false; error: string }
+
+export function buildAddLinkRequest(payload: AddLinkPayload, key: string): string {
+  return JSON.stringify({ key, action: 'addLink', payload })
+}
+
+export function parseAddLinkResponse(text: string): AddLinkResult {
+  const base = parseWriteResponse(text)
+  if (!base.ok) return base
+  let parsed: Record<string, unknown> = {}
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    /* parseWriteResponse가 이미 걸렀다. */
+  }
+  return {
+    ok: true,
+    added: typeof parsed.added === 'number' ? parsed.added : 0,
+    URL: typeof parsed.URL === 'string' ? parsed.URL : '',
+  }
+}
+
+export async function addLink(payload: AddLinkPayload, key: string): Promise<AddLinkResult> {
+  const r = await postWrite(buildAddLinkRequest(payload, key))
+  return r.ok ? parseAddLinkResponse(r.text) : r
 }

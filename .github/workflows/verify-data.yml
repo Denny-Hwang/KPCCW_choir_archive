@@ -1,0 +1,29 @@
+name: 시트 데이터 점검
+
+# 매주 월요일 아침, 배포된 Apps Script가 내려주는 실제 데이터를 앱과 같은 코드로 읽어 본다.
+# 곡명 참조 오류·버려진 행·주소 오류가 있으면 실패로 표시되고, GitHub이 저장소 관리자에게 메일을 보낸다.
+# (시트는 사람이 고치므로 이 점검은 코드 변경과 무관하게 깨질 수 있다 — 그래서 CI와 따로 둔다.)
+on:
+  schedule:
+    - cron: '23 15 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: 시트 응답 점검
+        run: |
+          URL="${VITE_API_URL:-$(sed -n "s/^  '\(https:\/\/script.google.com[^']*\)'.*/\1/p" src/lib/api.ts)}"
+          npm run verify -- "$URL" --strict
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}

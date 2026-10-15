@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createContext, runInContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import { GS_FILES } from './gs-files'
 
 /**
  * Apps Script의 제목·재생목록명 파서를 실제 채널 데이터로 잡아 둔다.
@@ -21,7 +22,7 @@ function loadSync(): Record<string, any> {
     }
   }
   createContext(sandbox)
-  for (const file of ['Code.gs', 'Setup.gs', 'YouTubeSync.gs']) {
+  for (const file of GS_FILES) {
     runInContext(readFileSync(new URL('../../apps-script/' + file, import.meta.url), 'utf8'), sandbox)
   }
   return sandbox
@@ -102,6 +103,30 @@ describe('parseVideoTitle_', () => {
 
   it('파트 표시가 없으면 합창으로 본다', () => {
     expect(parseVideoTitle('[중앙아트] 중앙성가 39집 07. 사랑의 종소리').part).toBe('합창')
+  })
+
+  it('구분자 없이 파트가 곡명 뒤에 붙은 옛 형식 (36집)', () => {
+    // 실제 채널 제목. 전에는 파트는 맞게 읽고 곡명에서 떼지 않아,
+    // 악보집 등록이 곡 이름을 "이런 교회 되게 하소서 합창"으로 만들었다.
+    const cases = [
+      ['[중앙아트] 중앙성가 36집 09. 이런 교회 되게 하소서 합창', '합창'],
+      ['[중앙아트] 중앙성가 36집 09. 이런 교회 되게 하소서 알토', '알토'],
+      ['[중앙아트] 중앙성가 36집 09. 이런 교회 되게 하소서 (소프라노)', '소프라노'],
+      ['[중앙아트] 중앙성가 36집 09. 이런 교회 되게 하소서 테너 MIDI', '테너'],
+    ] as const
+    for (const [title, part] of cases) {
+      const r = parseVideoTitle(title)
+      expect(r.number).toBe(9)
+      expect(r.title).toBe('이런 교회 되게 하소서')
+      expect(r.part).toBe(part)
+      expect(r.bookCode).toBe('중36')
+    }
+  })
+
+  it('곡명 한가운데의 파트 낱말은 떼지 않는다', () => {
+    const r = parseVideoTitle('[중앙아트] 중앙성가 30집 04. 천사들의 합창 소리 - 베이스')
+    expect(r.title).toBe('천사들의 합창 소리')
+    expect(r.part).toBe('베이스')
   })
 
   it('실제 41집 재생목록의 제목 형식 (파트에 숫자가 붙는다)', () => {
@@ -209,7 +234,7 @@ describe('buildLinkRow_', () => {
  * 이름 뒤 밑줄이 내부 헬퍼 규약이므로, 그 호출이 전부 어딘가에 정의돼 있는지만 본다.
  */
 describe('.gs 내부 헬퍼', () => {
-  const files = ['Code.gs', 'Setup.gs', 'YouTubeSync.gs']
+  const files = GS_FILES
   const sources = files.map((f) => ({
     file: f,
     src: readFileSync(new URL('../../apps-script/' + f, import.meta.url), 'utf8')
@@ -231,5 +256,39 @@ describe('.gs 내부 헬퍼', () => {
       }
     }
     expect([...new Set(missing)]).toEqual([])
+  })
+})
+
+describe('songsFromCache_', () => {
+  const songsFromCache = gs.songsFromCache_ as (
+    cache: Array<Record<string, string>>,
+    book: string,
+  ) => Array<{ number: number; title: string }>
+
+  it('업로드 목록(재생목록명에 집 번호 없음)에서도 제목으로 권을 읽는다', () => {
+    const cache = [
+      { videoId: 'a', 제목: '[중앙아트] 중앙성가 36집 09. 이런 교회 되게 하소서 합창', 재생목록명: '(전체 업로드)' },
+      { videoId: 'b', 제목: '[중앙아트] 중앙성가 37집 01. 다른 곡 - 합창', 재생목록명: '(전체 업로드)' },
+    ]
+    expect(songsFromCache(cache, '중36')).toEqual([{ number: 9, title: '이런 교회 되게 하소서' }])
+  })
+
+  it('같은 곡번호면 구분자로 파트를 뗀 제목을 더 믿는다', () => {
+    const cache = [
+      { videoId: 'a', 제목: '[중앙아트] 중앙성가 10집 05. 할렐루야 합창', 재생목록명: '[합창 듣기] 중앙성가 10집' },
+      { videoId: 'b', 제목: '[중앙아트] 중앙성가 10집 05. 할렐루야 합창 - 소프라노', 재생목록명: '[중앙아트] 중앙성가 10집' },
+    ]
+    expect(songsFromCache(cache, '중10')).toEqual([{ number: 5, title: '할렐루야 합창' }])
+  })
+})
+
+describe('stripPartTail_', () => {
+  const strip = gs.stripPartTail_ as (title: string) => string
+
+  it('끝에 붙은 파트 이름만 뗀다', () => {
+    expect(strip('이런 교회 되게 하소서 합창')).toBe('이런 교회 되게 하소서')
+    expect(strip('이런 교회 되게 하소서 (알토)')).toBe('이런 교회 되게 하소서')
+    expect(strip('천사들의 합창 소리')).toBe('')
+    expect(strip('합창')).toBe('')
   })
 })

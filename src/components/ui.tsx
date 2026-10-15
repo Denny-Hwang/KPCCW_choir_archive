@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { copyText } from '../lib/clipboard'
+import { PlayIcon } from './icons'
 
 export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'warn' | 'danger' | 'ok'; children: ReactNode }) {
   const tones = {
@@ -41,13 +42,25 @@ export function Section({ title, action, children }: { title: string; action?: R
  * 복사 버튼. 클립보드 API가 막힌 환경(iOS 사파리 등)에서는 텍스트 영역을 펼쳐
  * 수동 복사를 유도한다 (§7.2).
  */
-export function CopyBlock({ text, label, className = '' }: { text: string; label: string; className?: string }) {
+export function CopyBlock({
+  text,
+  label,
+  className = '',
+  onCopied,
+}: {
+  text: string
+  label: string
+  className?: string
+  /** 클립보드에 들어갔거나, 손으로 복사하려고 텍스트를 펼쳤을 때. */
+  onCopied?: () => void
+}) {
   const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle')
 
   async function handleCopy() {
     if (!text) return
     const ok = await copyText(text)
     setState(ok ? 'copied' : 'manual')
+    onCopied?.()
     if (ok) window.setTimeout(() => setState('idle'), 2000)
   }
 
@@ -91,12 +104,14 @@ export function Spinner({ label = '불러오는 중' }: { label?: string }) {
 }
 
 /**
- * 예배 실황 영상 버튼 (§4.3 기록영상URL, §11의 "유튜브가 아닌 경우" 항목).
+ * 찬양기록 버튼 (§4.3 기록영상URL, §11의 "유튜브가 아닌 경우" 항목).
+ * 그 날 성가대가 부른 찬양 영상이다. 화면에서는 "찬양기록"이라 부른다 — 예배 전체가 아니라
+ * 우리 찬양을 남긴 기록이라는 뜻이 대원들에게 더 바로 읽힌다.
  *
  * 그 날의 기록영상이 있으면 그것을 쓰고, 없으면 교회 홈페이지의 예배 영상 게시판으로 보낸다.
  * 유튜브가 아닌 주소도 그대로 링크한다 — 교회 홈페이지에 올라오는 것이 원래 형태다.
  *
- * 작은 밑줄 링크로는 눈에 띄지 않아 버튼으로 만든다. 색은 아카이브의 `실황영상` 칩과 맞춘다.
+ * 작은 밑줄 링크로는 눈에 띄지 않아 버튼으로 만든다. 색은 아카이브의 `찬양기록` 칩과 맞춘다.
  */
 export function RecordingButton({
   recordingUrl,
@@ -106,7 +121,7 @@ export function RecordingButton({
 }: {
   recordingUrl?: string
   fallbackUrl?: string
-  /** 'quiet'는 게시판 전체로 가는 보조 동작. 붉은색은 그 날의 실황영상에만 쓴다. */
+  /** 'quiet'는 게시판 전체로 가는 보조 동작. 붉은색은 그 날의 찬양기록에만 쓴다. */
   tone?: 'loud' | 'quiet'
   className?: string
 }) {
@@ -127,10 +142,8 @@ export function RecordingButton({
       rel="noreferrer noopener"
       className={`btn w-full ${skin} ${className}`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 shrink-0 fill-current">
-        <path d="M8 5v14l11-7z" />
-      </svg>
-      {own ? '이 날 실황영상 보기' : '교회 홈페이지에서 예배 영상 보기'}
+      <PlayIcon className="h-6 w-6" />
+      {own ? '이 날 찬양기록 보기' : '교회 홈페이지에서 예배 영상 보기'}
     </a>
   )
 }

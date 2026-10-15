@@ -2,6 +2,15 @@ import { Suspense, lazy } from 'react'
 import { HashRouter, NavLink, Route, Routes } from 'react-router-dom'
 import { ArchiveProvider, useArchive } from './lib/useArchive'
 import { Spinner } from './components/ui'
+import {
+  ArchiveTabIcon,
+  ChurchIcon,
+  HomeTabIcon,
+  PlannerTabIcon,
+  RefreshIcon,
+  ShelfTabIcon,
+  SongTabIcon,
+} from './components/icons'
 import Home from './pages/Home'
 import Archive from './pages/Archive'
 import Library from './pages/Library'
@@ -12,6 +21,7 @@ import SongDetail from './pages/SongDetail'
 // 대원이 홈만 보고 닫는 흔한 경우에 이걸 먼저 받게 할 이유가 없다.
 const Planner = lazy(() => import('./pages/Planner'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Ready = lazy(() => import('./pages/Ready'))
 
 /**
  * GitHub Pages에는 서버 리라이트가 없다. HashRouter를 쓰면 새로고침·딥링크가
@@ -21,11 +31,11 @@ const Settings = lazy(() => import('./pages/Settings'))
  * 총무·지휘자는 주소로 직접 연다: .../#/settings (데이터 점검용).
  */
 const TABS = [
-  { to: '/', label: '홈', end: true },
-  { to: '/archive', label: '아카이브', end: false },
-  { to: '/library', label: '곡', end: false },
-  { to: '/shelf', label: '서가', end: false },
-  { to: '/planner', label: '선곡', end: false },
+  { to: '/', label: '홈', end: true, Icon: HomeTabIcon },
+  { to: '/archive', label: '아카이브', end: false, Icon: ArchiveTabIcon },
+  { to: '/library', label: '곡', end: false, Icon: SongTabIcon },
+  { to: '/shelf', label: '서가', end: false, Icon: ShelfTabIcon },
+  { to: '/planner', label: '선곡', end: false, Icon: PlannerTabIcon },
 ]
 
 function Chrome() {
@@ -39,7 +49,7 @@ function Chrome() {
           <h1 className="min-w-0 truncate text-base font-extrabold tracking-tight sm:text-lg">
             {data.config.앱_제목}
           </h1>
-          <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
+          <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
             {data.config.교회홈페이지 && (
               <a
                 href={data.config.교회홈페이지}
@@ -47,32 +57,39 @@ function Chrome() {
                 rel="noreferrer noopener"
                 title="교회 홈페이지"
                 aria-label="교회 홈페이지 열기"
-                className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600"
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-stone-500 hover:bg-stone-100 hover:text-stone-700"
               >
-                <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 fill-current">
-                  <path d="M12 3 2 11h3v9h5v-6h4v6h5v-9h3L12 3Z" />
-                </svg>
-                교회
+                <ChurchIcon className="h-6 w-6" />
+                {/* 폰에서는 교회 이름이 길어 글자는 접고 아이콘만 크게 둔다. */}
+                <span className="hidden sm:inline">교회</span>
               </a>
             )}
-            <button type="button" onClick={reload} className="text-xs text-stone-400 hover:text-stone-600">
-              {loading ? '새로고침 중…' : '새로고침'}
+            <button
+              type="button"
+              onClick={reload}
+              aria-label="새로고침"
+              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-stone-500 hover:bg-stone-100 hover:text-stone-700"
+            >
+              <RefreshIcon className={`h-6 w-6 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{loading ? '받는 중' : '새로고침'}</span>
             </button>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-2">
-          {TABS.map((tab) => (
+        {/* 아이콘 + 글자. 글자만 있던 탭은 작고 붙어 있어 손가락으로 누르기도, 한눈에 찾기도 어려웠다. */}
+        <nav className="grid grid-cols-5 gap-1 px-2 pb-2">
+          {TABS.map(({ to, label, end, Icon }) => (
             <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
+              key={to}
+              to={to}
+              end={end}
               className={({ isActive }) =>
-                `whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold transition ${
+                `flex flex-col items-center gap-0.5 rounded-xl py-1.5 text-[13px] font-semibold transition ${
                   isActive ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100'
                 }`
               }
             >
-              {tab.label}
+              <Icon className="h-6 w-6" />
+              {label}
             </NavLink>
           ))}
         </nav>
@@ -92,6 +109,7 @@ function Chrome() {
             <Route path="/song/:songCode" element={<SongDetail />} />
             <Route path="/planner" element={<Planner />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/ready" element={<Ready />} />
             <Route
               path="*"
               element={<p className="card p-8 text-center text-sm text-stone-500">없는 화면입니다.</p>}
@@ -100,7 +118,7 @@ function Chrome() {
         </Suspense>
       </main>
 
-      <footer className="space-y-1 px-4 pb-6 pt-2 text-center text-[11px] text-stone-400">
+      <footer className="space-y-1 px-4 pb-6 pt-2 text-center text-xs text-stone-400">
         {data.config.교회홈페이지 && (
           <p>
             <a

@@ -9,7 +9,8 @@ const dir = mkdtempSync(join(tmpdir(), 'choir-'))
 const out = join(dir, 'bundle.mjs')
 try {
   await build({
-    entryPoints: ['scripts/verify-payload.ts'],
+    // RUN_ENTRY로 다른 스크립트를 돌린다 (npm run og). 기본은 시트 응답 점검.
+    entryPoints: [process.env.RUN_ENTRY || 'scripts/verify-payload.ts'],
     bundle: true, platform: 'node', format: 'esm', target: 'node20', outfile: out, logLevel: 'error',
   })
   await import(pathToFileURL(out).href)

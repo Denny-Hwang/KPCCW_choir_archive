@@ -92,3 +92,21 @@ export function normalizeLink(url: string, startSeconds?: number | null): Normal
     unrecognized: false,
   }
 }
+
+/**
+ * 시트에 아직 없는 파트 영상을 유튜브에서 찾는 검색 주소.
+ *
+ * 채널 동기화가 놓친 영상이 실제로 있었다(36집 알토 등). 앱이 "없음"으로 끝나면
+ * 대원은 거기서 멈춘다. 채널 제목과 같은 꼴("중앙성가 36집 09. 곡명 알토")로 검색하면
+ * 첫 결과가 거의 그 영상이다.
+ */
+export function youtubeSearchUrl(
+  song: { 제목: string; 수록번호: number | null },
+  book: { 시리즈: string; 권: number | null } | undefined,
+  part?: string,
+): string {
+  const head = book && book.권 != null ? `${book.시리즈} ${book.권}집` : ''
+  const no = book && song.수록번호 != null ? `${String(song.수록번호).padStart(2, '0')}.` : ''
+  const query = [head, no, song.제목, part].filter(Boolean).join(' ')
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+}

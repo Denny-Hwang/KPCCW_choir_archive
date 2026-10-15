@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # 매일 아침(로스앤젤레스 7시 무렵) 다시 배포해 카톡 미리보기를 그날의 다음 찬양으로 바꾼다.
+  # 코드가 같아도 index.html의 OG 태그만 달라진다 (scripts/og-tags.ts).
+  schedule:
+    - cron: '17 14 * * *'
 
 permissions:
   contents: read
@@ -40,6 +44,12 @@ jobs:
           # 읽기 전용 URL이라 저장소 변수로 두어도 된다 (§13.3).
           # 데이터에 개인정보가 없고, 앱을 여는 사람의 브라우저에 어차피 노출된다.
           # 비워 두면 앱은 예시 데이터를 보여주고, 설정 화면에서 직접 넣을 수 있다.
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+
+      - name: 카톡 미리보기 문구
+        # 실패해도 배포는 계속한다 — 기본 문구로 남을 뿐이다.
+        run: npm run og
+        env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
 
       - uses: actions/configure-pages@v5

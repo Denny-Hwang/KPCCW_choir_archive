@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createContext, runInContext } from 'node:vm'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { GS_FILES } from './gs-files'
 
 /**
  * Apps Script 쓰기 엔드포인트(§12.2)를 가짜 스프레드시트 위에서 실제로 돌려 본다.
@@ -18,6 +19,7 @@ class FakeSheet {
   getLastRow() { return this.rows.length }
   getLastColumn() { return this.rows[0]?.length ?? 0 }
   getMaxRows() { return this.rows.length + 100 }
+  setFrozenRows() {}
   getRange(row: number, col: number, numRows = 1, numCols = 1) {
     const sheet = this
     return {
@@ -37,6 +39,10 @@ class FakeSheet {
             sheet.rows[idx][col - 1 + c] = v
           })
         })
+        return this
+      },
+      setFontWeight() {
+        return this
       },
       setValue(v: Cell) {
         this.setValues([[v]])
@@ -51,6 +57,10 @@ class FakeSpreadsheet {
     this.sheets = Object.fromEntries(sheets.map((s) => [s.name, s]))
   }
   getSheetByName(name: string) { return this.sheets[name] ?? null }
+  insertSheet(name: string) {
+    this.sheets[name] = new FakeSheet(name, [])
+    return this.sheets[name]
+  }
   getSpreadsheetTimeZone() { return 'America/Los_Angeles' }
 }
 
@@ -125,7 +135,7 @@ function load() {
     },
   }
   createContext(sandbox)
-  for (const file of ['Code.gs', 'Setup.gs', 'YouTubeSync.gs']) {
+  for (const file of GS_FILES) {
     runInContext(readFileSync(new URL('../../apps-script/' + file, import.meta.url), 'utf8'), sandbox)
   }
   // 드롭다운 다시 심기는 진짜 시트 API가 필요하다. 불렸는지만 센다.
@@ -353,5 +363,108 @@ describe('applyPlan_', () => {
     const r = apply({ ...basePayload, rehearsals: [{ 연습일: '언젠가', 시각: '13:30', 구분: '주일', 장소: '' }] })
     expect(r.ok).toBe(true)
     expect(r.rehearsalsAdded).toBe(0)
+  })
+})
+
+describe('addLink_', () => {
+  let gs: Record<string, any>
+  let state: ReturnType<typeof load>['state']
+  const add = (payload: unknown) => post(gs, { key: 'secret', action: 'addLink', payload })
+  const rows = () => state.ss.sheets.practice_links.rows
+  beforeEach(() => {
+    ;({ gs, state } = load())
+  })
+
+  it('빠진 파트에 사람이 찾은 영상을 확인된 상태로 붙인다', () => {
+    const r = add({ 표시명: '가곡 (중47-01)', 파트: '알토', URL: 'https://www.youtube.com/watch?v=AbCdEfGhIjK&si=x' })
+    expect(r).toEqual({ ok: true, added: 1, URL: 'https://youtu.be/AbCdEfGhIjK' })
+    expect(rows().at(-1)).toEqual(['가곡 (중47-01)', '알토', 'https://youtu.be/AbCdEfGhIjK', '', '앱', 'manual', true])
+    expect(state.validationsInstalled).toBe(1)
+  })
+
+  it('같은 곡·파트·영상이 이미 있으면 붙이지 않는다', () => {
+    const before = rows().length
+    expect(add({ 표시명: '가곡 (중47-01)', 파트: '합창', URL: 'https://youtu.be/aaa' }).ok).toBe(false) // 'aaa'는 ID가 아니다
+    add({ 표시명: '가곡 (중47-01)', 파트: '테너', URL: 'https://youtu.be/AbCdEfGhIjK' })
+    const r = add({ 표시명: '가곡 (중47-01)', 파트: '테너', URL: 'AbCdEfGhIjK' })
+    expect(r).toMatchObject({ ok: true, added: 0 })
+    expect(rows().length).toBe(before + 1)
+  })
+
+  it('없는 곡, 없는 파트, 유튜브가 아닌 주소는 거부한다', () => {
+    const before = JSON.stringify(rows())
+    expect(add({ 표시명: '없는 곡', 파트: '알토', URL: 'AbCdEfGhIjK' }).error).toContain('없는 곡')
+    expect(add({ 표시명: '가곡 (중47-01)', 파트: '지휘', URL: 'AbCdEfGhIjK' }).ok).toBe(false)
+    expect(add({ 표시명: '가곡 (중47-01)', 파트: '알토', URL: 'https://example.com' }).error).toContain('유튜브')
+    expect(JSON.stringify(rows())).toBe(before)
+  })
+})
+
+describe('nextServiceReadiness_ (주간 자동 점검)', () => {
+  it('다음 찬양의 곡마다 빠진 파트·확인 대기·연습 일정을 짚는다', () => {
+    const { gs } = load()
+    const r = gs.nextServiceReadiness_(gs.SpreadsheetApp.getActiveSpreadsheet(), '2026-10-12')
+    expect(r.date).toBe('2026-10-25')
+    const text = r.lines.join('\n')
+    expect(text).toContain('가곡 (중47-01)')
+    // 합창은 미확인 링크뿐, 소프라노는 확인된 것이 하나 있다. 알토~베이스는 없다.
+    expect(text).toContain('영상 없음: 알토, 테너, 베이스')
+    expect(text).toContain('확인 대기(공지에서 빠짐): 합창')
+    expect(text).not.toContain('확인 대기(공지에서 빠짐): 합창, 소프라노')
+    expect(text).toContain('연습 1회 (남은 연습 0회)')
+    expect(r.problems).toBe(2)
+  })
+
+  it('다음 찬양일이 없으면 그것부터 말한다', () => {
+    const { gs } = load()
+    const r = gs.nextServiceReadiness_(gs.SpreadsheetApp.getActiveSpreadsheet(), '2027-01-01')
+    expect(r.lines[0]).toContain('다음 찬양일이 시트에 없습니다')
+    expect(r.problems).toBe(1)
+  })
+})
+
+describe('config 비밀 행', () => {
+  it('알림메일은 GET 응답에 나가지 않는다', () => {
+    const { gs, state } = load()
+    state.ss.sheets.config.rows.push(['알림메일', 'someone@example.com'])
+    const rows = gs.readSheet_(state.ss, 'config', 'America/Los_Angeles') as Array<Record<string, unknown>>
+    expect(rows.map((r) => r['키'])).not.toContain('알림메일')
+    expect(rows.map((r) => r['키'])).not.toContain('앱편집키')
+  })
+})
+
+describe('_변경기록', () => {
+  it('앱의 쓰기마다 편집자·동작·내용·결과를 남기고, 키는 남기지 않는다', () => {
+    const { gs, state } = load()
+    post(gs, {
+      key: 'secret',
+      editor: '김총무',
+      action: 'addLink',
+      payload: { 표시명: '가곡 (중47-01)', 파트: '알토', URL: 'https://youtu.be/AbCdEfGhIjK' },
+    })
+    const log = state.ss.sheets['_변경기록'].rows
+    expect(log[0]).toEqual(['시각', '편집자', '동작', '내용', '결과'])
+    expect(log[1].slice(1)).toEqual(['김총무', 'addLink', '가곡 (중47-01) / 알토 ← https://youtu.be/AbCdEfGhIjK', '성공'])
+    expect(JSON.stringify(log)).not.toContain('secret')
+  })
+
+  it('키가 틀린 시도도 남긴다', () => {
+    const { gs, state } = load()
+    post(gs, { key: 'guess', action: 'verifyLink', payload: { 표시명: 'x', 파트: '합창', URL: 'u' } })
+    const log = state.ss.sheets['_변경기록'].rows
+    expect(log[1][1]).toBe('(이름 없음)')
+    expect(String(log[1][4])).toContain('편집 키가 맞지 않습니다')
+    expect(JSON.stringify(log)).not.toContain('guess')
+  })
+})
+
+describe('writeKeyIsDefault', () => {
+  it('편집 키가 기본값인지만 알리고 키는 내보내지 않는다', () => {
+    const { gs, state } = load()
+    expect(gs.buildPayload_().writeKeyIsDefault).toBe(false) // fixture 키는 Secret
+    state.ss.sheets.config.rows = state.ss.sheets.config.rows.filter((r) => r[0] !== '앱편집키')
+    const payload = gs.buildPayload_()
+    expect(payload.writeKeyIsDefault).toBe(true)
+    expect(JSON.stringify(payload)).not.toContain('selah')
   })
 })

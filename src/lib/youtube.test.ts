@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractStartSeconds, extractVideoId, normalizeLink } from './youtube'
+import { extractStartSeconds, extractVideoId, normalizeLink, youtubeSearchUrl } from './youtube'
 
 describe('extractVideoId', () => {
   it('허용된 모든 입력 형태에서 ID를 뽑는다 (§8)', () => {
@@ -74,5 +74,17 @@ describe('normalizeLink', () => {
     expect(n.shareUrl).toBe('https://drive.google.com/file/d/abc/view')
     expect(n.embedUrl).toBeNull()
     expect(n.unrecognized).toBe(true)
+  })
+})
+
+describe('youtubeSearchUrl', () => {
+  it('채널 제목과 같은 꼴로 검색한다', () => {
+    const url = youtubeSearchUrl({ 제목: '이런 교회 되게 하소서', 수록번호: 9 }, { 시리즈: '중앙성가', 권: 36 }, '알토')
+    expect(decodeURIComponent(url.split('search_query=')[1])).toBe('중앙성가 36집 09. 이런 교회 되게 하소서 알토')
+  })
+
+  it('악보집을 모르면 곡명과 파트만', () => {
+    const url = youtubeSearchUrl({ 제목: '참 아름다워라', 수록번호: null }, undefined, '테너')
+    expect(decodeURIComponent(url.split('search_query=')[1])).toBe('참 아름다워라 테너')
   })
 })

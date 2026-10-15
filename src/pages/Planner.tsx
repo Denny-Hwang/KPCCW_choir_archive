@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ChecklistIcon } from '../components/icons'
 import { useArchive } from '../lib/useArchive'
 import {
   buildCandidates,
@@ -99,6 +101,16 @@ export default function Planner() {
 
   return (
     <div className="space-y-6">
+      <Link
+        to="/ready"
+        className="card flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-50"
+      >
+        <span className="flex items-center gap-2 text-base font-bold">
+          <ChecklistIcon className="h-6 w-6" />
+          이번 주 준비 상태
+        </span>
+        <span className="text-sm text-stone-400">파트 영상·연습·공지 →</span>
+      </Link>
       <div className="card space-y-3 p-4">
         <div className="flex flex-wrap items-end gap-2">
           <div>
