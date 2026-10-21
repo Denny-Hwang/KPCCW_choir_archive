@@ -232,6 +232,7 @@ function expectedWriteKey_(ss) {
  *   { key, action: 'applyPlan',  payload: { 찬양일, 예배구분, 곡: [표시명…], rehearsals: [{연습일, 시각, 구분, 장소}] } }
  *   { key, action: 'verifyLink', payload: { 표시명, 파트, URL, 검증: true|false } }
  *   { key, action: 'addLink',    payload: { 표시명, 파트, URL } }
+ *   { key, action: 'updateRehearsals', payload: { 찬양일, rehearsals: [{연습일, 시각, 구분, 장소}] } }
  * 응답은 언제나 JSON이고, 실패도 { ok: false, error } 로 200에 실어 보낸다 —
  * Apps Script는 상태 코드를 고를 수 없고, 앱은 어차피 본문을 읽어야 이유를 안다.
  */
@@ -255,7 +256,7 @@ function handleWrite_(body) {
     logChange_(ss, body, denied);
     return denied;
   }
-  if (action !== 'applyPlan' && action !== 'verifyLink' && action !== 'addLink') {
+  if (action !== 'applyPlan' && action !== 'verifyLink' && action !== 'addLink' && action !== 'updateRehearsals') {
     return { ok: false, error: '알 수 없는 요청입니다: ' + String(action) };
   }
 
@@ -269,6 +270,7 @@ function handleWrite_(body) {
     var result;
     if (action === 'verifyLink') result = verifyLink_(ss, payload);
     else if (action === 'addLink') result = addLink_(ss, payload);
+    else if (action === 'updateRehearsals') result = updateRehearsals_(ss, payload);
     else result = applyPlan_(ss, payload);
     logChange_(ss, body, result);
     return result;
@@ -321,6 +323,8 @@ function describeChange_(body) {
       return String(p['표시명'] || '') + ' / ' + String(p['파트'] || '') + ' → ' + (p['검증'] === false ? '확인 취소' : '확인');
     case 'addLink':
       return String(p['표시명'] || '') + ' / ' + String(p['파트'] || '') + ' ← ' + String(p['URL'] || '');
+    case 'updateRehearsals':
+      return String(p['찬양일'] || '') + ' 연습 일정 수정 — ' + (Array.isArray(p['rehearsals']) ? p['rehearsals'].length : 0) + '회';
     default:
       return '';
   }
@@ -563,6 +567,62 @@ function applyPlan_(ss, payload) {
   }
 
   return result;
+}
+
+/**
+ * 한 찬양일의 연습 일정을 통째로 바꾼다. 이미 공지한 일정의 날짜·시각·구분 오류를 고치는 용도다.
+ * 그 찬양일의 기존 rehearsals 행을 지우고 받은 목록을 새로 쓴다. 목록이 비면 일정이 모두 지워진다.
+ */
+function updateRehearsals_(ss, payload) {
+  var tz = ss.getSpreadsheetTimeZone() || 'America/Los_Angeles';
+  var 찬양일 = String(payload['찬양일'] || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(찬양일)) return { ok: false, error: '찬양일이 날짜(YYYY-MM-DD)가 아닙니다: ' + 찬양일 };
+
+  var rehearsals = [];
+  var seen = {};
+  (Array.isArray(payload['rehearsals']) ? payload['rehearsals'] : []).forEach(function (r) {
+    var 연습일 = String((r && r['연습일']) || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(연습일)) return;
+    var 시각 = String((r && r['시각']) || '').trim();
+    var key = 연습일 + '|' + 시각;
+    if (seen[key]) return;
+    seen[key] = true;
+    rehearsals.push({ 연습일: 연습일, 시각: 시각, 구분: String((r && r['구분']) || '').trim(), 장소: String((r && r['장소']) || '').trim() });
+  });
+
+  var sheet = ss.getSheetByName('rehearsals');
+  if (!sheet) return { ok: false, error: 'rehearsals 시트가 없습니다.' };
+  var headers = sheetHeaders_(sheet);
+  var dateCol = headers.indexOf('찬양일');
+  if (dateCol === -1) return { ok: false, error: 'rehearsals 시트에 찬양일 열이 없습니다.' };
+
+  // 아래에서 위로 지워야 행 번호가 밀리지 않는다.
+  var removed = 0;
+  var lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    var values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    for (var i = values.length - 1; i >= 0; i--) {
+      if (String(normalizeCell_(values[i][dateCol], tz)).slice(0, 10) === 찬양일) {
+        sheet.deleteRow(i + 2);
+        removed++;
+      }
+    }
+  }
+
+  var rows = rehearsals.map(function (r) {
+    return headers.map(function (header) {
+      switch (String(header).trim()) {
+        case '찬양일': return sheetDate_(찬양일, tz);
+        case '연습일': return sheetDate_(r.연습일, tz);
+        case '시각': return r.시각;
+        case '구분': return r.구분;
+        case '장소': return r.장소;
+        default: return '';
+      }
+    });
+  });
+  if (rows.length) sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+  return { ok: true, removed: removed, added: rows.length };
 }
 
 function sheetHeaders_(sheet) {

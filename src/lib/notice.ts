@@ -4,7 +4,7 @@
  * 기존 메모 포맷을 글자 단위로 재현하는 것이 목표다. 대원들이 포맷 변화를
  * 느끼면 안 되므로, 여기서의 "개선"은 전부 회귀다. 형식을 바꾸려면 config를 통해야 한다.
  */
-import { formatKoreanTime, formatMonthDay, parseDateKey } from './date'
+import { formatKoreanTime, formatMonthDay, parseDateKey, rehearsalKindOf } from './date'
 import { linksByPart, verifiedLinks } from './derive'
 import { normalizeLink } from './youtube'
 import type { AppConfig, Part, PracticeLink, Rehearsal, Service, Song } from './types'
@@ -43,12 +43,17 @@ export function formatTitle(format: string, service: Pick<Service, '찬양일' |
   return out.replace(/\s+/g, ' ').trim()
 }
 
-/** "9일 주일 1시 30분" — 일(日)만, 요일은 `구분` 열 값을 그대로 쓴다 (§7.2). */
+/**
+ * "9일 주일 1시 30분" — 일(日)만. 구분은 `구분` 열 값을 쓰되, 날짜가 일요일·수요일이면
+ * 실제 요일을 따른다. 날짜를 고치고 구분을 안 고친 행이 공지에 틀린 요일로 나가면 안 된다.
+ */
 export function formatRehearsalLine(rehearsal: Rehearsal): string {
   const d = parseDateKey(rehearsal.연습일)
   const day = d ? `${d.getDate()}일` : rehearsal.연습일
   const time = formatKoreanTime(rehearsal.시각)
-  return [day, rehearsal.구분, time].filter(Boolean).join(' ')
+  const kind = rehearsalKindOf(rehearsal.연습일)
+  const label = kind === '주일' || kind === '수요일' ? kind : rehearsal.구분
+  return [day, label, time].filter(Boolean).join(' ')
 }
 
 function partBlocks(links: PracticeLink[], order: Part[], spaced: boolean): string[] {

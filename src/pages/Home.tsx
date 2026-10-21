@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useArchive } from '../lib/useArchive'
 import { buildNotice, noticeWarnings } from '../lib/notice'
 import { buildServiceView, pickFeaturedService, songPath, totalAttendance } from '../lib/derive'
-import { daysBetween, formatKoreanTime, formatLongDate, formatMonthDay, monthKey, todayKey, weekdayOf } from '../lib/date'
+import { daysBetween, formatKoreanTime, formatLongDate, formatMonthDay, monthKey, rehearsalKindOf, todayKey, weekdayOf } from '../lib/date'
 import type { Rehearsal } from '../lib/types'
 import { PartLinks } from '../components/PartLinks'
+import { RehearsalEditDialog } from '../components/RehearsalEditDialog'
 import { ChecklistIcon, PlayIcon } from '../components/icons'
 import { markNoticeCopied } from '../lib/api'
 import { youtubeSearchUrl } from '../lib/youtube'
@@ -105,7 +107,13 @@ export default function Home() {
             <p className="text-sm text-stone-400">선곡이 아직 입력되지 않았습니다.</p>
           )}
 
-          <RehearsalSchedule rehearsals={view.rehearsals} today={today} upcoming={upcoming} header={data.config.공지_연습헤더} />
+          <RehearsalSchedule
+            찬양일={featured.찬양일}
+            rehearsals={view.rehearsals}
+            today={today}
+            upcoming={upcoming}
+            header={data.config.공지_연습헤더}
+          />
 
           {view.total != null && (
             <p className="text-xs text-stone-500">
@@ -190,21 +198,29 @@ export default function Home() {
  * 지난 찬양에는 일정이 있을 때만 그린다 — 끝난 일정을 "없음"이라고 말할 이유가 없다.
  */
 function RehearsalSchedule({
+  찬양일,
   rehearsals,
   today,
   upcoming,
   header,
 }: {
+  찬양일: string
   rehearsals: Rehearsal[]
   today: string
   upcoming: boolean
   header: string
 }) {
+  const [editing, setEditing] = useState(false)
   if (!rehearsals.length && !upcoming) return null
   const next = rehearsals.find((r) => r.연습일 >= today)
   return (
     <div className="rounded-xl bg-stone-50 p-3">
-      <p className="mb-1 text-xs font-bold text-stone-500">{header}</p>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <p className="text-xs font-bold text-stone-500">{header}</p>
+        <button type="button" className="text-xs text-stone-400 underline" onClick={() => setEditing(true)}>
+          일정 수정
+        </button>
+      </div>
       {rehearsals.length ? (
         <ul className="space-y-0.5 text-sm">
           {rehearsals.map((r) => {
@@ -216,7 +232,8 @@ function RehearsalSchedule({
                 className={`flex flex-wrap items-center gap-x-1.5 ${past ? 'text-stone-400 line-through' : ''} ${isNext ? 'font-bold' : ''}`}
               >
                 <span>
-                  {formatMonthDay(r.연습일)} ({weekdayOf(r.연습일)}) {r.구분} {formatKoreanTime(r.시각)}
+                  {formatMonthDay(r.연습일)} ({weekdayOf(r.연습일)}) {['주일', '수요일'].includes(rehearsalKindOf(r.연습일)) ? rehearsalKindOf(r.연습일) : r.구분}{' '}
+                  {formatKoreanTime(r.시각)}
                 </span>
                 {r.장소 && <span className="font-normal text-stone-400">· {r.장소}</span>}
                 {isNext && <span className="chip bg-stone-800 text-xs text-white">다음 연습</span>}
@@ -227,6 +244,7 @@ function RehearsalSchedule({
       ) : (
         <p className="text-sm text-stone-400">연습 일정이 아직 등록되지 않았습니다.</p>
       )}
+      {editing && <RehearsalEditDialog 찬양일={찬양일} rehearsals={rehearsals} onClose={() => setEditing(false)} />}
     </div>
   )
 }
