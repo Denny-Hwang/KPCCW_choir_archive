@@ -8,7 +8,7 @@
  * text/plain으로 보내고, 302 리다이렉트를 따라간 응답을 그대로 읽는다.
  */
 import { getEditorName, getEndpoint } from './api'
-import { parseDateKey } from './date'
+import { parseDateKey, rehearsalMismatch } from './date'
 import type { PlannedDate } from './planner'
 import type { Rehearsal } from './types'
 
@@ -62,6 +62,10 @@ export function validatePlan(payload: PlanPayload): string[] {
   // 부르고 나서 연습할 일은 없다. 실수로 남긴 기본 일정을 잡아낸다.
   if (payload.rehearsals.some((r) => parseDateKey(r.연습일) && r.연습일 >= payload.찬양일)) {
     problems.push('찬양일 이후의 연습일이 있습니다.')
+  }
+  for (const r of payload.rehearsals) {
+    const mismatch = rehearsalMismatch(r)
+    if (mismatch) problems.push(mismatch)
   }
   return problems
 }
@@ -196,4 +200,55 @@ export function parseAddLinkResponse(text: string): AddLinkResult {
 export async function addLink(payload: AddLinkPayload, key: string): Promise<AddLinkResult> {
   const r = await postWrite(buildAddLinkRequest(payload, key))
   return r.ok ? parseAddLinkResponse(r.text) : r
+}
+
+/* ---- 이미 등록한 연습 일정 고치기 — 홈의 "일정 수정" ---- */
+
+export interface UpdateRehearsalsPayload {
+  찬양일: string
+  rehearsals: Array<Pick<Rehearsal, '연습일' | '시각' | '구분' | '장소'>>
+}
+
+export type UpdateRehearsalsResult = { ok: true; removed: number; added: number } | { ok: false; error: string }
+
+export function validateRehearsalEdit(payload: UpdateRehearsalsPayload): string[] {
+  const problems: string[] = []
+  if (!parseDateKey(payload.찬양일)) problems.push('찬양일이 올바르지 않습니다.')
+  for (const r of payload.rehearsals) {
+    if (!parseDateKey(r.연습일)) {
+      problems.push('연습일 중 날짜가 아닌 것이 있습니다.')
+      break
+    }
+  }
+  if (payload.rehearsals.some((r) => parseDateKey(r.연습일) && r.연습일 >= payload.찬양일)) {
+    problems.push('찬양일 이후의 연습일이 있습니다.')
+  }
+  for (const r of payload.rehearsals) {
+    const mismatch = rehearsalMismatch(r)
+    if (mismatch) problems.push(mismatch)
+  }
+  return problems
+}
+
+export function buildUpdateRehearsalsRequest(payload: UpdateRehearsalsPayload, key: string): string {
+  return JSON.stringify({ key, action: 'updateRehearsals', payload })
+}
+
+export function parseUpdateRehearsalsResponse(text: string): UpdateRehearsalsResult {
+  const base = parseWriteResponse(text)
+  if (!base.ok) return base
+  let parsed: Record<string, unknown> = {}
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    /* parseWriteResponse가 이미 걸렀다. */
+  }
+  const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  return { ok: true, removed: count(parsed.removed), added: count(parsed.added) }
+}
+
+/** 그 찬양일의 연습 일정을 통째로 바꾼다 (기존 행은 지우고 새로 쓴다). */
+export async function updateRehearsals(payload: UpdateRehearsalsPayload, key: string): Promise<UpdateRehearsalsResult> {
+  const r = await postWrite(buildUpdateRehearsalsRequest(payload, key))
+  return r.ok ? parseUpdateRehearsalsResponse(r.text) : r
 }

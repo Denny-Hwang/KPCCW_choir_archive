@@ -7,7 +7,7 @@ import { applyPlan, validatePlan, type PlanPayload, type WriteResult } from '../
 import { nextServiceDate, parseRehearsalPattern, suggestRehearsals } from '../lib/planner'
 import { buildRehearsalPaste, buildServicePaste, pasteHeader, REHEARSAL_COLUMNS, SERVICE_COLUMNS } from '../lib/paste'
 import { songUsage, titleOf } from '../lib/derive'
-import { formatLongDate, formatMonthDay, todayKey, weekdayOf } from '../lib/date'
+import { alignRehearsal, formatLongDate, formatMonthDay, todayKey, weekdayOf } from '../lib/date'
 import type { Rehearsal, Song } from '../lib/types'
 import { Badge, CopyBlock } from './ui'
 import { WriteKeyField } from './WriteKeyField'
@@ -193,7 +193,7 @@ export function PlanDialog({ song, onClose }: { song: Song; onClose: () => void 
                 <div className="space-y-2">
                   {rehearsals.drafts.map((r, i) => (
                     <div key={i} className="flex flex-wrap items-center gap-1">
-                      <input type="date" value={r.연습일} onChange={(e) => updateDraft(i, { 연습일: e.target.value })} className="field w-auto" disabled={busy} />
+                      <input type="date" value={r.연습일} onChange={(e) => updateDraft(i, alignRehearsal({ ...r, 연습일: e.target.value }))} className="field w-auto" disabled={busy} />
                       <input type="time" value={r.시각} onChange={(e) => updateDraft(i, { 시각: e.target.value })} className="field w-32" disabled={busy} />
                       <select value={r.구분} onChange={(e) => updateDraft(i, { 구분: e.target.value })} className="field w-24" disabled={busy}>
                         {[...new Set([...구분_OPTIONS, r.구분].filter(Boolean))].map((v) => (

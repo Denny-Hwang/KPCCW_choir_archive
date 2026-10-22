@@ -112,3 +112,38 @@ export function previousWeekday(key: string, weekday: number): string {
   d.setDate(d.getDate() - delta)
   return todayKey(d)
 }
+
+/** 연습 구분별 기본 시각. 주일은 예배 후 1시 30분, 수요일은 저녁 8시. */
+export const REHEARSAL_DEFAULT_TIME: Record<string, string> = { 주일: '13:30', 수요일: '20:00' }
+
+/** 날짜의 요일이 정하는 연습 구분. 일요일 → 주일, 수요일 → 수요일, 그 밖은 특별. */
+export function rehearsalKindOf(key: string): '주일' | '수요일' | '특별' | '' {
+  const d = parseDateKey(key)
+  if (!d) return ''
+  if (d.getDay() === 0) return '주일'
+  if (d.getDay() === 3) return '수요일'
+  return '특별'
+}
+
+/**
+ * 날짜와 구분이 어긋났는지. `구분`이 주일/수요일일 때만 요일을 대조한다 — 특별 연습은
+ * 아무 요일이나 될 수 있다. 어긋나면 사람이 읽을 문장을, 맞으면 null을 돌려준다.
+ */
+export function rehearsalMismatch(r: { 연습일: string; 구분: string }): string | null {
+  const actual = weekdayOf(r.연습일)
+  if (!actual) return null
+  if ((r.구분 === '주일' && actual !== '일') || (r.구분 === '수요일' && actual !== '수')) {
+    return `${formatMonthDay(r.연습일)}은 ${actual}요일인데 구분이 "${r.구분}"입니다.`
+  }
+  return null
+}
+
+/**
+ * 날짜에 맞춰 구분과 기본 시각을 채운 연습. 날짜를 바꿨을 때, 또는 "맞추기"를 눌렀을 때 쓴다.
+ * 일요일·수요일이 아니면 특별로 두고 시각은 건드리지 않는다.
+ */
+export function alignRehearsal<T extends { 연습일: string; 구분: string; 시각: string }>(r: T): T {
+  const kind = rehearsalKindOf(r.연습일)
+  if (!kind) return r
+  return { ...r, 구분: kind, 시각: REHEARSAL_DEFAULT_TIME[kind] ?? r.시각 }
+}

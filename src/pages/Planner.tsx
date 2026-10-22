@@ -13,7 +13,7 @@ import {
 import { buildRehearsalPaste, buildServicePaste, findDuplicateServiceDates, pasteHeader, REHEARSAL_COLUMNS, SERVICE_COLUMNS } from '../lib/paste'
 import { buildMonthlySummary, buildNotice } from '../lib/notice'
 import { seasonHintFor, titleOf } from '../lib/derive'
-import { formatKoreanTime, formatMonthDay, todayKey, weekdayOf } from '../lib/date'
+import { alignRehearsal, formatKoreanTime, formatMonthDay, rehearsalMismatch, todayKey, weekdayOf } from '../lib/date'
 import { SongPicker } from '../components/SongPicker'
 import { SheetApply } from '../components/SheetApply'
 import { CopyBlock, Badge, Section } from '../components/ui'
@@ -343,7 +343,7 @@ function PlanCard({
                 value={r.연습일}
                 onChange={(e) =>
                   onUpdate({
-                    rehearsals: date.rehearsals.map((x, j) => (j === i ? { ...x, 연습일: e.target.value } : x)),
+                    rehearsals: date.rehearsals.map((x, j) => (j === i ? alignRehearsal({ ...x, 연습일: e.target.value }) : x)),
                   })
                 }
                 className="field w-auto"
@@ -376,6 +376,20 @@ function PlanCard({
               >
                 빼기
               </button>
+              {rehearsalMismatch(r) && (
+                <span className="w-full text-rose-600">
+                  {rehearsalMismatch(r)}{' '}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() =>
+                      onUpdate({ rehearsals: date.rehearsals.map((x, j) => (j === i ? alignRehearsal(x) : x)) })
+                    }
+                  >
+                    맞추기
+                  </button>
+                </span>
+              )}
             </div>
           ))}
           <button
